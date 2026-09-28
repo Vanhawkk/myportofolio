@@ -5,7 +5,6 @@ from django.contrib.auth import login, logout
 from django.contrib.auth.decorators import login_required
 from django.contrib.auth.forms import AuthenticationForm, UserCreationForm
 from django.core import serializers
-from django.core.exceptions import PermissionDenied
 from django.http import HttpResponse
 from django.shortcuts import get_object_or_404, redirect, render
 from django.views.decorators.http import require_POST
@@ -177,11 +176,8 @@ def show_projects(request):
     return render(request, "projects.html", context)
 
 
-@login_required(login_url="/login/")
+@superuser_required
 def create_project(request):
-    if not request.user.is_superuser:
-        raise PermissionDenied
-
     form = ProjectForm(request.POST or None)
 
     if request.method == "POST" and form.is_valid():
@@ -192,16 +188,34 @@ def create_project(request):
     context = {
         "name": "Muhammad Eshan Bobby Bhaskara",
         "form": form,
+        "form_title": "Add New Project",
+        "submit_label": "Add Project",
     }
     return render(request, "projects_form.html", context)
 
 
-@login_required(login_url="/login/")
+@editor_or_superuser_required("main.change_project")
+def update_project(request, project_id):
+    project = get_object_or_404(Project, pk=project_id)
+    form = ProjectForm(request.POST or None, instance=project)
+
+    if request.method == "POST" and form.is_valid():
+        form.save()
+        messages.success(request, "Project updated successfully!")
+        return redirect("main:show_projects")
+
+    context = {
+        "name": "Muhammad Eshan Bobby Bhaskara",
+        "form": form,
+        "form_title": "Update Project",
+        "submit_label": "Save Changes",
+    }
+    return render(request, "projects_form.html", context)
+
+
+@superuser_required
 @require_POST
 def delete_project(request, project_id):
-    if not request.user.is_superuser:
-        raise PermissionDenied
-
     project = get_object_or_404(Project, pk=project_id)
     project.delete()
     messages.success(request, "Project deleted successfully!")

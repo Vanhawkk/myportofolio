@@ -87,6 +87,12 @@
 
                                     {% include "components/project_star.html" with project=project %}
 
+                                    {% if perms.main.change_project %}
+                                        <a href="{% url 'main:update_project' project.id %}">
+                                            Edit
+                                        </a>
+                                    {% endif %}
+
                                     {% if user.is_superuser %}
                                         <button
                                             type="button"

@@ -520,6 +520,10 @@ class ProjectTest(TestCase):
             username="regular_user",
             password=self.password,
         )
+        self.editor = User.objects.create_user(
+            username="project_editor",
+            password=self.password,
+        )
         self.superuser = User.objects.create_superuser(
             username="portfolio_owner",
             password=self.password,
@@ -534,6 +538,15 @@ class ProjectTest(TestCase):
             primary_link_url="https://github.com/6avier/veto",
             display_order=1,
         )
+
+        editor_group = Group.objects.create(name="Editor")
+        editor_group.permissions.add(
+            Permission.objects.get(
+                content_type__app_label="main",
+                codename="change_project",
+            )
+        )
+        self.editor.groups.add(editor_group)
 
     def test_project_model(self):
         self.assertEqual(str(self.project), "VETO")
@@ -608,6 +621,51 @@ class ProjectTest(TestCase):
         self.assertTemplateUsed(response, "projects_form.html")
         self.assertContains(response, "This field is required.")
         self.assertEqual(Project.objects.count(), project_count)
+
+    def test_update_project_page_is_prefilled(self):
+        self.client.force_login(self.superuser)
+
+        response = self.client.get(
+            reverse("main:update_project", args=[self.project.id])
+        )
+
+        self.assertEqual(response.status_code, 200)
+        self.assertTemplateUsed(response, "projects_form.html")
+        self.assertContains(response, "Update Project")
+        self.assertContains(response, f'value="{self.project.title}"')
+
+    def test_update_project_with_valid_data(self):
+        self.client.force_login(self.superuser)
+        project_count = Project.objects.count()
+
+        response = self.client.post(
+            reverse("main:update_project", args=[self.project.id]),
+            {
+                "title": "Updated VETO",
+                "role": self.project.role,
+                "description": self.project.description,
+                "thumbnail": self.project.thumbnail,
+                "primary_link_label": self.project.primary_link_label,
+                "primary_link_url": self.project.primary_link_url,
+                "display_order": self.project.display_order,
+            },
+            follow=True,
+        )
+
+        self.project.refresh_from_db()
+        self.assertRedirects(response, reverse("main:show_projects"))
+        self.assertEqual(Project.objects.count(), project_count)
+        self.assertEqual(self.project.title, "Updated VETO")
+        self.assertContains(response, "Project updated successfully!")
+
+    def test_update_project_returns_404_for_unknown_id(self):
+        self.client.force_login(self.superuser)
+
+        response = self.client.get(
+            reverse("main:update_project", args=[uuid.uuid4()])
+        )
+
+        self.assertEqual(response.status_code, 404)
 
     def test_projects_json_endpoint(self):
         response = self.client.get(reverse("main:get_projects_json"))
@@ -719,6 +777,58 @@ class ProjectTest(TestCase):
 
         self.assertEqual(response.status_code, 403)
 
+    def test_anonymous_user_is_redirected_from_update_project(self):
+        update_url = reverse("main:update_project", args=[self.project.id])
+
+        response = self.client.get(update_url)
+
+        self.assertRedirects(
+            response,
+            f'{reverse("main:login")}?next={update_url}',
+            fetch_redirect_response=False,
+        )
+
+    def test_regular_user_cannot_update_project(self):
+        self.client.force_login(self.regular_user)
+
+        response = self.client.get(
+            reverse("main:update_project", args=[self.project.id])
+        )
+
+        self.assertEqual(response.status_code, 403)
+
+    def test_editor_can_update_project(self):
+        self.client.force_login(self.editor)
+
+        response = self.client.post(
+            reverse("main:update_project", args=[self.project.id]),
+            {
+                "title": "VETO Edited",
+                "role": self.project.role,
+                "description": self.project.description,
+                "thumbnail": self.project.thumbnail,
+                "primary_link_label": self.project.primary_link_label,
+                "primary_link_url": self.project.primary_link_url,
+                "display_order": self.project.display_order,
+            },
+        )
+
+        self.assertRedirects(response, reverse("main:show_projects"))
+        self.project.refresh_from_db()
+        self.assertEqual(self.project.title, "VETO Edited")
+
+    def test_editor_cannot_create_or_delete_project(self):
+        self.client.force_login(self.editor)
+
+        create_response = self.client.get(reverse("main:create_project"))
+        delete_response = self.client.post(
+            reverse("main:delete_project", args=[self.project.id])
+        )
+
+        self.assertEqual(create_response.status_code, 403)
+        self.assertEqual(delete_response.status_code, 403)
+        self.assertTrue(Project.objects.filter(pk=self.project.id).exists())
+
     def test_anonymous_user_is_redirected_from_delete_project(self):
         delete_url = reverse("main:delete_project", args=[self.project.id])
 
@@ -743,16 +853,31 @@ class ProjectTest(TestCase):
 
     def test_project_controls_are_hidden_from_non_superusers(self):
         create_url = reverse("main:create_project")
+        update_url = reverse("main:update_project", args=[self.project.id])
         delete_url = reverse("main:delete_project", args=[self.project.id])
 
         anonymous_response = self.client.get(reverse("main:show_projects"))
         self.assertNotContains(anonymous_response, f'href="{create_url}"')
+        self.assertNotContains(anonymous_response, f'href="{update_url}"')
         self.assertNotContains(anonymous_response, f'action="{delete_url}"')
 
         self.client.force_login(self.regular_user)
         regular_response = self.client.get(reverse("main:show_projects"))
         self.assertNotContains(regular_response, f'href="{create_url}"')
+        self.assertNotContains(regular_response, f'href="{update_url}"')
         self.assertNotContains(regular_response, f'action="{delete_url}"')
+
+    def test_editor_sees_only_project_update_control(self):
+        self.client.force_login(self.editor)
+        create_url = reverse("main:create_project")
+        update_url = reverse("main:update_project", args=[self.project.id])
+        delete_url = reverse("main:delete_project", args=[self.project.id])
+
+        response = self.client.get(reverse("main:show_projects"))
+
+        self.assertNotContains(response, f'href="{create_url}"')
+        self.assertContains(response, f'href="{update_url}"')
+        self.assertNotContains(response, f'action="{delete_url}"')
 
     def test_project_controls_are_visible_to_superuser(self):
         self.client.force_login(self.superuser)
@@ -762,6 +887,10 @@ class ProjectTest(TestCase):
         self.assertContains(
             response,
             f'href="{reverse("main:create_project")}"',
+        )
+        self.assertContains(
+            response,
+            f'href="{reverse("main:update_project", args=[self.project.id])}"',
         )
         self.assertContains(
             response,
