@@ -14,6 +14,31 @@ from main.models import Experience, Project
 from main.permissions import editor_or_superuser_required, superuser_required
 
 
+EXPERIENCE_PUBLIC_FIELDS = (
+    "title",
+    "description",
+    "category",
+    "thumbnail",
+    "started_at",
+    "ended_at",
+)
+
+PROJECT_PUBLIC_FIELDS = (
+    "title",
+    "role",
+    "description",
+    "thumbnail",
+    "primary_link_label",
+    "primary_link_url",
+    "secondary_link_label",
+    "secondary_link_url",
+    "third_link_label",
+    "third_link_url",
+    "note",
+    "display_order",
+)
+
+
 def register(request):
     form = UserCreationForm(request.POST or None)
 
@@ -77,7 +102,11 @@ def show_main(request):
 
 def get_experiences_json(request):
     experiences = Experience.objects.order_by("-started_at", "title")
-    experiences_json = serializers.serialize("json", experiences)
+    experiences_json = serializers.serialize(
+        "json",
+        experiences,
+        fields=EXPERIENCE_PUBLIC_FIELDS,
+    )
     return HttpResponse(experiences_json, content_type="application/json")
 
 
@@ -155,7 +184,7 @@ def get_projects_json(request):
     projects_json = serializers.serialize(
         "json",
         projects,
-        use_natural_foreign_keys=True,
+        fields=PROJECT_PUBLIC_FIELDS,
     )
     return HttpResponse(projects_json, content_type="application/json")
 

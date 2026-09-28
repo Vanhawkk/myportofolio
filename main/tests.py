@@ -333,6 +333,17 @@ class MainTest(TestCase):
         self.assertEqual(data[0]["pk"], str(self.experience.id))
         self.assertEqual(data[0]["fields"]["title"], self.experience.title)
         self.assertEqual(data[0]["fields"]["category"], "part-time")
+        self.assertEqual(
+            set(data[0]["fields"]),
+            {
+                "title",
+                "description",
+                "category",
+                "thumbnail",
+                "started_at",
+                "ended_at",
+            },
+        )
 
     def test_experiences_json_endpoint_returns_empty_list(self):
         Experience.objects.all().delete()
@@ -519,6 +530,7 @@ class ProjectTest(TestCase):
         self.regular_user = User.objects.create_user(
             username="regular_user",
             password=self.password,
+            email="regular@example.com",
         )
         self.editor = User.objects.create_user(
             username="project_editor",
@@ -677,6 +689,23 @@ class ProjectTest(TestCase):
         self.assertEqual(len(data), 1)
         self.assertEqual(data[0]["pk"], str(self.project.id))
         self.assertEqual(data[0]["fields"]["title"], "VETO")
+        self.assertEqual(
+            set(data[0]["fields"]),
+            {
+                "title",
+                "role",
+                "description",
+                "thumbnail",
+                "primary_link_label",
+                "primary_link_url",
+                "secondary_link_label",
+                "secondary_link_url",
+                "third_link_label",
+                "third_link_url",
+                "note",
+                "display_order",
+            },
+        )
 
     def test_projects_json_can_filter_by_title(self):
         Project.objects.create(
@@ -982,10 +1011,13 @@ class ProjectTest(TestCase):
         self.assertContains(response, 'class="star-count">1</span>')
         self.assertContains(response, self.regular_user.username)
 
-    def test_projects_json_uses_usernames_for_stars(self):
+    def test_projects_json_does_not_expose_users_who_starred(self):
         self.project.starred_by.add(self.regular_user)
 
         response = self.client.get(reverse("main:get_projects_json"))
 
         data = json.loads(response.content)
-        self.assertEqual(data[0]["fields"]["starred_by"], [["regular_user"]])
+        self.assertNotIn("starred_by", data[0]["fields"])
+        self.assertNotIn("password", data[0]["fields"])
+        self.assertNotContains(response, self.regular_user.username)
+        self.assertNotContains(response, self.regular_user.email)
