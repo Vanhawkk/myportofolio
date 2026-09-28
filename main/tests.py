@@ -909,6 +909,25 @@ class ProjectTest(TestCase):
         )
         self.assertEqual(self.project.starred_by.count(), 0)
 
+    def test_anonymous_user_sees_login_prompt_instead_of_star_form(self):
+        star_url = reverse("main:toggle_star", args=[self.project.id])
+
+        response = self.client.get(reverse("main:show_projects"))
+
+        self.assertContains(response, "Login to star")
+        self.assertContains(response, f'href="{reverse("main:login")}"')
+        self.assertNotContains(response, f'action="{star_url}"')
+
+    def test_authenticated_star_control_uses_post_and_csrf(self):
+        self.client.force_login(self.regular_user)
+        star_url = reverse("main:toggle_star", args=[self.project.id])
+
+        response = self.client.get(reverse("main:show_projects"))
+
+        self.assertContains(response, 'method="post"')
+        self.assertContains(response, f'action="{star_url}"')
+        self.assertContains(response, "csrfmiddlewaretoken")
+
     def test_logged_in_user_can_star_and_unstar_project(self):
         self.client.force_login(self.regular_user)
         star_url = reverse("main:toggle_star", args=[self.project.id])
@@ -928,15 +947,25 @@ class ProjectTest(TestCase):
             self.project.starred_by.filter(pk=self.regular_user.pk).exists()
         )
 
-    def test_get_request_does_not_change_project_star(self):
+    def test_get_request_is_rejected_without_changing_project_star(self):
         self.client.force_login(self.regular_user)
 
         response = self.client.get(
             reverse("main:toggle_star", args=[self.project.id])
         )
 
-        self.assertRedirects(response, reverse("main:show_projects"))
+        self.assertEqual(response.status_code, 405)
         self.assertEqual(self.project.starred_by.count(), 0)
+
+    def test_editor_can_star_project(self):
+        self.client.force_login(self.editor)
+
+        response = self.client.post(
+            reverse("main:toggle_star", args=[self.project.id])
+        )
+
+        self.assertRedirects(response, reverse("main:show_projects"))
+        self.assertTrue(self.project.starred_by.filter(pk=self.editor.pk).exists())
 
     def test_multiple_users_can_star_the_same_project(self):
         self.project.starred_by.add(self.regular_user, self.superuser)
