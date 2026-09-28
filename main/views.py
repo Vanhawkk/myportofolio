@@ -12,6 +12,7 @@ from django.views.decorators.http import require_POST
 
 from main.forms import ExperienceForm, ProjectForm
 from main.models import Experience, Project
+from main.permissions import editor_or_superuser_required, superuser_required
 
 
 def register(request):
@@ -99,6 +100,7 @@ def show_experience(request):
     return render(request, "experience.html", context)
 
 
+@superuser_required
 def create_experience(request):
     form = ExperienceForm(request.POST or None)
 
@@ -116,6 +118,7 @@ def create_experience(request):
     return render(request, "experience_form.html", context)
 
 
+@editor_or_superuser_required("main.change_experience")
 def update_experience(request, experience_id):
     experience = get_object_or_404(Experience, pk=experience_id)
     form = ExperienceForm(request.POST or None, instance=experience)
@@ -134,6 +137,7 @@ def update_experience(request, experience_id):
     return render(request, "experience_form.html", context)
 
 
+@superuser_required
 @require_POST
 def delete_experience(request, experience_id):
     experience = get_object_or_404(Experience, pk=experience_id)

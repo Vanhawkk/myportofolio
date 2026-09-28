@@ -2,7 +2,7 @@ import json
 import re
 import uuid
 
-from django.contrib.auth.models import User
+from django.contrib.auth.models import Group, Permission, User
 from django.test import TestCase
 from django.urls import reverse
 from django.utils import timezone
@@ -164,6 +164,11 @@ class AuthenticationTest(TestCase):
 
 class MainTest(TestCase):
     def setUp(self):
+        self.superuser = User.objects.create_superuser(
+            username="portfolio_owner",
+            password="StrongPassword123!",
+            email="owner@example.com",
+        )
         self.experience = Experience.objects.create(
             title="Asisten Dosen PBP",
             description="Membantu mahasiswa memahami pengembangan web.",
@@ -216,6 +221,7 @@ class MainTest(TestCase):
         self.assertNotContains(response, "Ongoing")
 
     def test_create_experience_page_is_accessible(self):
+        self.client.force_login(self.superuser)
         response = self.client.get(reverse("main:create_experience"))
 
         self.assertEqual(response.status_code, 200)
@@ -228,6 +234,7 @@ class MainTest(TestCase):
         )
 
     def test_create_experience_with_valid_data(self):
+        self.client.force_login(self.superuser)
         response = self.client.post(
             reverse("main:create_experience"),
             {
@@ -246,6 +253,7 @@ class MainTest(TestCase):
         self.assertContains(response, "Experience added successfully!")
 
     def test_create_experience_with_invalid_data(self):
+        self.client.force_login(self.superuser)
         experience_count = Experience.objects.count()
         response = self.client.post(
             reverse("main:create_experience"),
@@ -262,6 +270,7 @@ class MainTest(TestCase):
         self.assertEqual(Experience.objects.count(), experience_count)
 
     def test_update_experience_page_is_prefilled(self):
+        self.client.force_login(self.superuser)
         response = self.client.get(
             reverse("main:update_experience", args=[self.experience.id])
         )
@@ -272,6 +281,7 @@ class MainTest(TestCase):
         self.assertContains(response, f'value="{self.experience.title}"')
 
     def test_update_experience_with_valid_data(self):
+        self.client.force_login(self.superuser)
         experience_count = Experience.objects.count()
         response = self.client.post(
             reverse("main:update_experience", args=[self.experience.id]),
@@ -292,6 +302,7 @@ class MainTest(TestCase):
         self.assertContains(response, "Experience updated successfully!")
 
     def test_update_experience_returns_404_for_unknown_id(self):
+        self.client.force_login(self.superuser)
         response = self.client.get(
             reverse("main:update_experience", args=[uuid.uuid4()])
         )
@@ -301,6 +312,7 @@ class MainTest(TestCase):
     def test_experience_page_shows_thumbnail_and_actions(self):
         self.experience.thumbnail = "https://example.com/experience.jpg"
         self.experience.save()
+        self.client.force_login(self.superuser)
 
         response = self.client.get(reverse("main:show_experience"))
         update_url = reverse("main:update_experience", args=[self.experience.id])
@@ -339,6 +351,7 @@ class MainTest(TestCase):
         self.assertEqual(experience_list[0].id, self.experience.id)
 
     def test_experience_page_contains_delete_confirmation(self):
+        self.client.force_login(self.superuser)
         response = self.client.get(reverse("main:show_experience"))
         delete_url = reverse("main:delete_experience", args=[self.experience.id])
 
@@ -347,6 +360,7 @@ class MainTest(TestCase):
         self.assertContains(response, "csrfmiddlewaretoken")
 
     def test_delete_experience_with_post(self):
+        self.client.force_login(self.superuser)
         response = self.client.post(
             reverse("main:delete_experience", args=[self.experience.id]),
             follow=True,
@@ -357,6 +371,7 @@ class MainTest(TestCase):
         self.assertContains(response, "Experience deleted successfully!")
 
     def test_delete_experience_rejects_get(self):
+        self.client.force_login(self.superuser)
         response = self.client.get(
             reverse("main:delete_experience", args=[self.experience.id])
         )
@@ -365,11 +380,137 @@ class MainTest(TestCase):
         self.assertTrue(Experience.objects.filter(pk=self.experience.id).exists())
 
     def test_delete_experience_returns_404_for_unknown_id(self):
+        self.client.force_login(self.superuser)
         response = self.client.post(
             reverse("main:delete_experience", args=[uuid.uuid4()])
         )
 
         self.assertEqual(response.status_code, 404)
+
+
+class ExperienceAuthorizationTest(TestCase):
+    def setUp(self):
+        self.regular_user = User.objects.create_user(username="regular_user")
+        self.editor = User.objects.create_user(username="experience_editor")
+        self.superuser = User.objects.create_superuser(
+            username="portfolio_owner",
+            password="StrongPassword123!",
+            email="owner@example.com",
+        )
+        self.experience = Experience.objects.create(
+            title="Authorization Test Experience",
+            description="Used to verify the experience permission matrix.",
+            category="part-time",
+        )
+
+        editor_group = Group.objects.create(name="Editor")
+        editor_group.permissions.add(
+            Permission.objects.get(
+                content_type__app_label="main",
+                codename="change_experience",
+            )
+        )
+        self.editor.groups.add(editor_group)
+
+        self.create_url = reverse("main:create_experience")
+        self.update_url = reverse(
+            "main:update_experience",
+            args=[self.experience.id],
+        )
+        self.delete_url = reverse(
+            "main:delete_experience",
+            args=[self.experience.id],
+        )
+        self.list_url = reverse("main:show_experience")
+
+    def test_experience_list_remains_public(self):
+        response = self.client.get(self.list_url)
+
+        self.assertEqual(response.status_code, 200)
+        self.assertContains(response, self.experience.title)
+
+    def test_anonymous_user_is_redirected_from_experience_mutations(self):
+        responses = [
+            self.client.get(self.create_url),
+            self.client.get(self.update_url),
+            self.client.post(self.delete_url),
+        ]
+
+        for response, protected_url in zip(
+            responses,
+            [self.create_url, self.update_url, self.delete_url],
+        ):
+            self.assertRedirects(
+                response,
+                f"{reverse('main:login')}?next={protected_url}",
+                fetch_redirect_response=False,
+            )
+
+        self.assertTrue(Experience.objects.filter(pk=self.experience.id).exists())
+
+    def test_regular_user_receives_forbidden_for_experience_mutations(self):
+        self.client.force_login(self.regular_user)
+
+        self.assertEqual(self.client.get(self.create_url).status_code, 403)
+        self.assertEqual(self.client.get(self.update_url).status_code, 403)
+        self.assertEqual(self.client.post(self.delete_url).status_code, 403)
+        self.assertTrue(Experience.objects.filter(pk=self.experience.id).exists())
+
+    def test_editor_can_update_experience(self):
+        self.client.force_login(self.editor)
+
+        response = self.client.post(
+            self.update_url,
+            {
+                "title": "Updated by Editor",
+                "description": self.experience.description,
+                "category": self.experience.category,
+                "thumbnail": "",
+            },
+        )
+
+        self.assertRedirects(response, self.list_url)
+        self.experience.refresh_from_db()
+        self.assertEqual(self.experience.title, "Updated by Editor")
+
+    def test_editor_cannot_create_or_delete_experience(self):
+        self.client.force_login(self.editor)
+
+        self.assertEqual(self.client.get(self.create_url).status_code, 403)
+        self.assertEqual(self.client.post(self.delete_url).status_code, 403)
+        self.assertTrue(Experience.objects.filter(pk=self.experience.id).exists())
+
+    def test_anonymous_and_regular_users_do_not_see_experience_controls(self):
+        anonymous_response = self.client.get(self.list_url)
+
+        self.assertNotContains(anonymous_response, f'href="{self.create_url}"')
+        self.assertNotContains(anonymous_response, f'href="{self.update_url}"')
+        self.assertNotContains(anonymous_response, f'action="{self.delete_url}"')
+
+        self.client.force_login(self.regular_user)
+        regular_response = self.client.get(self.list_url)
+
+        self.assertNotContains(regular_response, f'href="{self.create_url}"')
+        self.assertNotContains(regular_response, f'href="{self.update_url}"')
+        self.assertNotContains(regular_response, f'action="{self.delete_url}"')
+
+    def test_editor_sees_only_experience_update_control(self):
+        self.client.force_login(self.editor)
+
+        response = self.client.get(self.list_url)
+
+        self.assertNotContains(response, f'href="{self.create_url}"')
+        self.assertContains(response, f'href="{self.update_url}"')
+        self.assertNotContains(response, f'action="{self.delete_url}"')
+
+    def test_superuser_sees_all_experience_controls(self):
+        self.client.force_login(self.superuser)
+
+        response = self.client.get(self.list_url)
+
+        self.assertContains(response, f'href="{self.create_url}"')
+        self.assertContains(response, f'href="{self.update_url}"')
+        self.assertContains(response, f'action="{self.delete_url}"')
 
 
 class ProjectTest(TestCase):

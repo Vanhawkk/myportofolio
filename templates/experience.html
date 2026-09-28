@@ -13,10 +13,12 @@
                         <p class="section-kicker">My journey so far</p>
                         <h1>Experience</h1>
                     </div>
-                    <a href="{% url 'main:create_experience' %}" class="button experience-add-button">
-                        <span aria-hidden="true">+</span>
-                        Add Experience
-                    </a>
+                    {% if user.is_superuser %}
+                        <a href="{% url 'main:create_experience' %}" class="button experience-add-button">
+                            <span aria-hidden="true">+</span>
+                            Add Experience
+                        </a>
+                    {% endif %}
                 </div>
 
                 <div class="experience-grid">
@@ -41,22 +43,28 @@
                             {% else %}
                                 <p class="experience-status">Done</p>
                             {% endif %}
-                            <div class="experience-actions">
-                                <a
-                                    href="{% url 'main:update_experience' experience.id %}"
-                                    class="button button-secondary"
-                                >
-                                    Edit
-                                </a>
-                                <button
-                                    type="button"
-                                    class="button button-danger"
-                                    popovertarget="delete-experience-{{ experience.id }}"
-                                >
-                                    Delete
-                                </button>
-                            </div>
-                            {% include "components/experience_delete_modal.html" with experience=experience %}
+                            {% if perms.main.change_experience %}
+                                <div class="experience-actions">
+                                    <a
+                                        href="{% url 'main:update_experience' experience.id %}"
+                                        class="button button-secondary"
+                                    >
+                                        Edit
+                                    </a>
+                                    {% if user.is_superuser %}
+                                        <button
+                                            type="button"
+                                            class="button button-danger"
+                                            popovertarget="delete-experience-{{ experience.id }}"
+                                        >
+                                            Delete
+                                        </button>
+                                    {% endif %}
+                                </div>
+                            {% endif %}
+                            {% if user.is_superuser %}
+                                {% include "components/experience_delete_modal.html" with experience=experience %}
+                            {% endif %}
                         </article>
                     {% empty %}
                         <p class="empty-state">
