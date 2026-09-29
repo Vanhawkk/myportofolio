@@ -1,33 +1,71 @@
-Nama : Muhammad Eshan Bobby Bhaskara
+# Personal Portfolio
 
-NPM : 2506546333
+Website portofolio pribadi berbasis Django yang menampilkan profil, pendidikan, pengalaman, dan proyek. Project ini dikembangkan secara bertahap untuk tugas individu mata kuliah Pemrograman Berbasis Platform.
 
-Kelas : PBP C
+- Nama: Muhammad Eshan Bobby Bhaskara
+- NPM: 2506546333
+- Kelas: PBP C
 
-Status : Ganteng
+## Fitur
+
+- Halaman Profile, Education, Experience, dan Projects yang dapat dibaca publik.
+- CRUD Experience dan Project dengan pembatasan hak akses di sisi server.
+- Registrasi, login, logout, session, dan cookie `last_login`.
+- Role Editor melalui Django Group dan permission bawaan Django.
+- Fitur star/unstar Project untuk pengguna yang sudah login.
+- Endpoint JSON publik dengan allowlist field untuk mencegah kebocoran data user.
+- Test otomatis untuk model, autentikasi, CRUD, JSON, dan matriks authorization.
+
+## Setup Lokal
+
+```bash
+python3 -m venv env
+source env/bin/activate
+pip install -r requirements.txt
+python manage.py migrate
+python manage.py createsuperuser
+python manage.py runserver
+```
+
+Website dapat dibuka melalui `http://127.0.0.1:8000/`. Django Admin tersedia di `http://127.0.0.1:8000/admin/`.
+
+Untuk menjalankan pemeriksaan dan seluruh test:
+
+```bash
+python manage.py check
+python manage.py test
+```
+
+## Star Project
+
+Model `Project` memiliki relasi many-to-many `starred_by` dengan model `User`. Toggle star hanya menerima request POST dan form-nya menggunakan CSRF token. Relasi many-to-many memastikan satu user tidak dapat menghasilkan lebih dari satu relasi star untuk Project yang sama.
+
+Guest hanya melihat tautan **Login to star**. User biasa, Editor, dan superuser dapat memberi atau membatalkan star. Halaman Project menampilkan jumlah star dan status `Star` atau `Unstar` untuk user aktif.
 
 ## AI Disclosure
 
-Selama mengerjakan project ini saya menggunakan Claude dan Codex. Saya memakai AI untuk berdiskusi, memahami tugas, membantu menulis bagian kode yang berulang, dan mencari penyebab error. Walaupun dibantu AI, saya tetap membaca kembali kode yang dibuat dan menentukan sendiri hasil akhir yang dimasukkan ke repository.
+Selama mengerjakan project ini saya menggunakan Claude dan Codex. Saya memakai AI untuk berdiskusi, memahami tugas, membantu bagian kode yang berulang, dan mencari penyebab error. Hasil AI tidak langsung dimasukkan seluruhnya; saya membaca diff, menyesuaikan implementasi dengan struktur project, menjalankan test, dan menentukan sendiri hasil akhir yang masuk repository.
 
 Yang saya lakukan sendiri:
 
 - Menentukan isi, deskripsi, dan pengalaman pribadi yang ditampilkan.
-- Menentukan susunan halaman profile, projects, experience, dan education.
+- Menentukan susunan halaman Profile, Projects, Experience, dan Education.
 - Memilih warna navy, blue, dan white yang dipakai pada website.
-- Mengecek hasil website melalui browser dan memastikan tampilannya sesuai dengan yang saya inginkan.
-- Membaca kembali perubahan kode dan hasil test sebelum menyelesaikan tugas.
+- Menentukan bahwa role Editor menggunakan Django Group dengan permission `change_experience` dan `change_project`.
+- Membaca perubahan kode, memeriksa matriks hak akses, dan meninjau hasil test sebelum commit.
 
 Yang dibantu AI:
 
-- Claude membantu saya berdiskusi tentang pilihan warna dan tampilan website.
-- AI membantu membuat struktur awal CSS Grid, timeline, dan efek hover pada card.
-- Codex membantu saya membaca Tutorial 3 dan Tugas 3 lalu membaginya menjadi beberapa langkah pengerjaan.
-- Codex membantu membuat form, view, URL, template, modal, dan test berdasarkan model yang sudah saya punya.
-- AI membantu menjelaskan cara kerja JSON, CSRF, create, update, dan delete.
-- AI membantu mencari error, mengecek Git, dan merapikan commit message.
+- Claude membantu diskusi awal mengenai pilihan warna dan tampilan website.
+- AI membantu struktur awal CSS Grid, timeline, dan efek hover pada card.
+- Codex membantu membaca spesifikasi Tugas 3 dan Tugas 4, memetakan kondisi repository, lalu membagi implementasi menjadi commit kecil.
+- Codex membantu membuat helper authorization, view update Project, kondisi permission pada template, dan test matriks role.
+- Codex membantu menemukan bahwa serializer Project mengirim relasi `starred_by` sebagai username, lalu membantu menggantinya dengan allowlist field public.
+- AI membantu menjelaskan JSON, CSRF, permission Django, HTTP 403, serta merapikan pesan commit.
 
-Strategi saya adalah memakai AI untuk membantu bagian teknis dan bagian kode yang berulang. Saya memberikan konteks tentang model dan kode yang sudah ada, lalu meminta pengerjaannya dibagi per langkah agar lebih mudah dicek. Hasil dari AI tidak langsung saya gunakan semuanya karena tetap perlu disesuaikan dengan model, desain, dan kebutuhan project saya. Setelah itu saya mengecek kembali melalui browser, `python manage.py check`, dan `python manage.py test`.
+Strategi prompting yang saya gunakan adalah memberikan dokumen tugas dan source code yang sudah ada, meminta AI menjelaskan gap implementasi, lalu membantu saya mengerjakan step by step tasknya. Setiap langkah dibatasi ke scope tertentu dan diminta menjalankan targeted test serta full test sebelum commit.
+
+Keterbatasan AI yang saya temukan adalah saran awal tetap perlu diperiksa terhadap struktur project dan perilaku Django yang sebenarnya. Contohnya, menyembunyikan tombol saja tidak cukup tanpa server-side check, serializer otomatis dapat ikut mengirim relasi user, dan test endpoint perlu memastikan request yang ditolak benar-benar tidak mengubah database. Karena itu, hasil AI diverifikasi dengan `python manage.py check`, targeted test, full test suite, serta pengujian matriks role melalui Django test client.
 
 ## Refleksi
 
