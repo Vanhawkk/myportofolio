@@ -846,6 +846,61 @@ main > section {
     font-size: 0.8rem;
 }
 
+.toast-component {
+    position: fixed;
+    inset: auto 2rem 2rem auto;
+    margin: 0;
+    padding: 1rem 1.5rem;
+    border: 1px solid var(--line);
+    border-radius: var(--radius);
+    background-color: var(--paper);
+    color: inherit;
+    box-shadow: 0 10px 25px rgba(28, 25, 23, 0.15);
+    display: none;
+    align-items: center;
+    gap: 1rem;
+    transition: opacity 0.3s ease, transform 0.3s ease;
+}
+
+.toast-component:popover-open {
+    display: flex;
+}
+
+.toast-hidden {
+    opacity: 0;
+    transform: translateY(150%);
+    pointer-events: none;
+}
+
+.toast-show {
+    opacity: 1;
+    transform: translateY(0);
+}
+
+.toast-title {
+    margin: 0 0 0.15rem;
+    font-size: 1rem;
+    font-weight: 700;
+}
+
+.toast-message {
+    margin: 0;
+    color: var(--text-muted);
+    font-size: 0.85rem;
+}
+
+.toast-success {
+    border-left: 4px solid #22c55e;
+}
+
+.toast-error {
+    border-left: 4px solid #b42318;
+}
+
+.toast-normal {
+    border-left: 4px solid var(--accent);
+}
+
 .delete-modal {
     display: none;
     position: fixed;

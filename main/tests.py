@@ -184,6 +184,8 @@ class MainTest(TestCase):
             response,
             f'href="{reverse("main:show_experience")}"',
         )
+        self.assertContains(response, 'id="toast-component"')
+        self.assertContains(response, "js/toast.js")
 
     def test_nonexistent_page_returns_404(self):
         response = self.client.get("/halaman-yang-tidak-ada/")
