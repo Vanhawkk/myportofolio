@@ -201,14 +201,9 @@ def get_projects_json(request):
 
 def show_projects(request):
     title_query = request.GET.get("title", "").strip()
-    projects = Project.objects.order_by("display_order", "title")
-
-    if title_query:
-        projects = projects.filter(title__icontains=title_query)
 
     context = {
         "name": "Muhammad Eshan Bobby Bhaskara",
-        "project_list": projects,
         "title_query": title_query,
     }
     return render(request, "projects.html", context)

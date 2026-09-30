@@ -571,16 +571,24 @@ class ProjectTest(TestCase):
         self.assertEqual(response.status_code, 200)
         self.assertTemplateUsed(response, "projects.html")
 
-    def test_project_data_appears(self):
+    def test_projects_page_contains_ajax_shell(self):
         response = self.client.get(reverse("main:show_projects"))
-        self.assertContains(response, self.project.title)
-        self.assertContains(response, self.project.role)
-        self.assertContains(response, self.project.description)
+        self.assertContains(response, 'id="projects-app"')
+        self.assertContains(response, 'id="projects-loading"')
+        self.assertContains(response, 'id="projects-error"')
+        self.assertContains(response, 'id="projects-empty"')
+        self.assertContains(response, 'id="projects-grid"')
+        self.assertContains(response, "js/projects.js")
+        self.assertContains(
+            response,
+            f'data-projects-endpoint="{reverse("main:get_projects_json")}"',
+        )
+        self.assertNotContains(response, self.project.title)
 
     def test_empty_projects_page(self):
         Project.objects.all().delete()
         response = self.client.get(reverse("main:show_projects"))
-        self.assertContains(response, "Belum ada proyek yang ditambahkan.")
+        self.assertContains(response, "No projects have been added or found.")
 
     def test_main_page_links_to_projects(self):
         response = self.client.get(reverse("main:show_main"))
@@ -760,7 +768,7 @@ class ProjectTest(TestCase):
             {"title": "veto"},
         )
 
-        self.assertContains(response, self.project.title)
+        self.assertNotContains(response, self.project.title)
         self.assertNotContains(response, "Unrelated Alpha")
         self.assertContains(response, 'value="veto"')
 
@@ -770,16 +778,15 @@ class ProjectTest(TestCase):
             {"title": "missing"},
         )
 
-        self.assertContains(response, 'No projects found for "missing".')
+        self.assertContains(response, "No projects have been added or found.")
 
     def test_projects_page_contains_delete_confirmation(self):
         self.client.force_login(self.superuser)
         response = self.client.get(reverse("main:show_projects"))
-        delete_url = reverse("main:delete_project", args=[self.project.id])
 
-        self.assertContains(response, "Delete Project?")
-        self.assertContains(response, f'action="{delete_url}"')
-        self.assertContains(response, "csrfmiddlewaretoken")
+        self.assertContains(response, 'data-is-superuser="true"')
+        self.assertContains(response, "data-delete-url-template=")
+        self.assertContains(response, "data-csrf-token=")
 
     def test_delete_project_with_post(self):
         self.client.force_login(self.superuser)
@@ -903,31 +910,27 @@ class ProjectTest(TestCase):
 
     def test_project_controls_are_hidden_from_non_superusers(self):
         create_url = reverse("main:create_project")
-        update_url = reverse("main:update_project", args=[self.project.id])
-        delete_url = reverse("main:delete_project", args=[self.project.id])
 
         anonymous_response = self.client.get(reverse("main:show_projects"))
         self.assertNotContains(anonymous_response, f'href="{create_url}"')
-        self.assertNotContains(anonymous_response, f'href="{update_url}"')
-        self.assertNotContains(anonymous_response, f'action="{delete_url}"')
+        self.assertContains(anonymous_response, 'data-can-edit="false"')
+        self.assertContains(anonymous_response, 'data-is-superuser="false"')
 
         self.client.force_login(self.regular_user)
         regular_response = self.client.get(reverse("main:show_projects"))
         self.assertNotContains(regular_response, f'href="{create_url}"')
-        self.assertNotContains(regular_response, f'href="{update_url}"')
-        self.assertNotContains(regular_response, f'action="{delete_url}"')
+        self.assertContains(regular_response, 'data-can-edit="false"')
+        self.assertContains(regular_response, 'data-is-superuser="false"')
 
     def test_editor_sees_only_project_update_control(self):
         self.client.force_login(self.editor)
         create_url = reverse("main:create_project")
-        update_url = reverse("main:update_project", args=[self.project.id])
-        delete_url = reverse("main:delete_project", args=[self.project.id])
 
         response = self.client.get(reverse("main:show_projects"))
 
         self.assertNotContains(response, f'href="{create_url}"')
-        self.assertContains(response, f'href="{update_url}"')
-        self.assertNotContains(response, f'action="{delete_url}"')
+        self.assertContains(response, 'data-can-edit="true"')
+        self.assertContains(response, 'data-is-superuser="false"')
 
     def test_project_controls_are_visible_to_superuser(self):
         self.client.force_login(self.superuser)
@@ -938,14 +941,8 @@ class ProjectTest(TestCase):
             response,
             f'href="{reverse("main:create_project")}"',
         )
-        self.assertContains(
-            response,
-            f'href="{reverse("main:update_project", args=[self.project.id])}"',
-        )
-        self.assertContains(
-            response,
-            f'action="{reverse("main:delete_project", args=[self.project.id])}"',
-        )
+        self.assertContains(response, 'data-can-edit="true"')
+        self.assertContains(response, 'data-is-superuser="true"')
 
     def test_anonymous_user_is_redirected_from_toggle_star(self):
         star_url = reverse("main:toggle_star", args=[self.project.id])
@@ -960,23 +957,22 @@ class ProjectTest(TestCase):
         self.assertEqual(self.project.starred_by.count(), 0)
 
     def test_anonymous_user_sees_login_prompt_instead_of_star_form(self):
-        star_url = reverse("main:toggle_star", args=[self.project.id])
-
         response = self.client.get(reverse("main:show_projects"))
 
-        self.assertContains(response, "Login to star")
-        self.assertContains(response, f'href="{reverse("main:login")}"')
-        self.assertNotContains(response, f'action="{star_url}"')
+        self.assertContains(response, 'data-is-authenticated="false"')
+        self.assertContains(
+            response,
+            f'data-login-url="{reverse("main:login")}"',
+        )
 
     def test_authenticated_star_control_uses_post_and_csrf(self):
         self.client.force_login(self.regular_user)
-        star_url = reverse("main:toggle_star", args=[self.project.id])
 
         response = self.client.get(reverse("main:show_projects"))
 
-        self.assertContains(response, 'method="post"')
-        self.assertContains(response, f'action="{star_url}"')
-        self.assertContains(response, "csrfmiddlewaretoken")
+        self.assertContains(response, 'data-is-authenticated="true"')
+        self.assertContains(response, "data-star-url-template=")
+        self.assertContains(response, "data-csrf-token=")
 
     def test_logged_in_user_can_star_and_unstar_project(self):
         self.client.force_login(self.regular_user)
@@ -1026,11 +1022,11 @@ class ProjectTest(TestCase):
         self.project.starred_by.add(self.regular_user)
         self.client.force_login(self.regular_user)
 
-        response = self.client.get(reverse("main:show_projects"))
+        response = self.client.get(reverse("main:get_projects_json"))
+        fields = json.loads(response.content)[0]["fields"]
 
-        self.assertContains(response, "Unstar")
-        self.assertContains(response, 'class="star-count">1</span>')
-        self.assertContains(response, self.regular_user.username)
+        self.assertTrue(fields["is_starred"])
+        self.assertEqual(fields["star_count"], 1)
 
     def test_projects_json_does_not_expose_users_who_starred(self):
         self.project.starred_by.add(self.regular_user)

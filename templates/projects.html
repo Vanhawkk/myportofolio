@@ -1,12 +1,29 @@
 {% extends "base.html" %}
+{% load static %}
 
 {% block meta %}
     <title>Projects - {{ name }}</title>
 {% endblock meta %}
 
+{% block scripts %}
+    <script src="{% static 'js/projects.js' %}" defer></script>
+{% endblock scripts %}
+
 {% block content %}
 <main>
-    <section class="projects-section">
+    <section
+        id="projects-app"
+        class="projects-section"
+        data-projects-endpoint="{% url 'main:get_projects_json' %}"
+        data-star-url-template="{% url 'main:toggle_star' '00000000-0000-0000-0000-000000000000' %}"
+        data-edit-url-template="{% url 'main:update_project' '00000000-0000-0000-0000-000000000000' %}"
+        data-delete-url-template="{% url 'main:delete_project' '00000000-0000-0000-0000-000000000000' %}"
+        data-login-url="{% url 'main:login' %}"
+        data-csrf-token="{{ csrf_token }}"
+        data-is-authenticated="{{ user.is_authenticated|yesno:'true,false' }}"
+        data-is-superuser="{{ user.is_superuser|yesno:'true,false' }}"
+        data-can-edit="{{ perms.main.change_project|yesno:'true,false' }}"
+    >
         <div class="container">
             <div class="project-header">
                 <div>
@@ -21,9 +38,10 @@
                 {% endif %}
             </div>
 
-            <form method="get" action="{% url 'main:show_projects' %}" class="project-search">
+            <form id="project-search-form" class="project-search">
                 <input
                     type="search"
+                    id="search-input"
                     name="title"
                     value="{{ title_query }}"
                     placeholder="Search by project title"
@@ -33,100 +51,16 @@
                 <button type="submit" class="button">Search</button>
             </form>
 
-            <div class="project-grid">
-                {% for project in project_list %}
-                    <article class="project-card" tabindex="0">
-                        <div class="project-media">
-                            <img
-                                class="project-image"
-                                src="{{ project.thumbnail }}"
-                                alt="Preview of {{ project.title }}"
-                            >
-
-                            <div class="project-overlay">
-                                <h2>{{ project.title }}</h2>
-                                <p class="project-role">{{ project.role }}</p>
-                                <p class="project-description">
-                                    {{ project.description }}
-                                </p>
-
-                                <div class="project-links">
-                                    {% if project.primary_link_url %}
-                                        <a
-                                            href="{{ project.primary_link_url }}"
-                                            target="_blank"
-                                            rel="noopener noreferrer"
-                                        >
-                                            {{ project.primary_link_label }}
-                                        </a>
-                                    {% endif %}
-
-                                    {% if project.secondary_link_url %}
-                                        <a
-                                            href="{{ project.secondary_link_url }}"
-                                            target="_blank"
-                                            rel="noopener noreferrer"
-                                        >
-                                            {{ project.secondary_link_label }}
-                                        </a>
-                                    {% endif %}
-
-                                    {% if project.third_link_url %}
-                                        <a
-                                            href="{{ project.third_link_url }}"
-                                            target="_blank"
-                                            rel="noopener noreferrer"
-                                        >
-                                            {{ project.third_link_label }}
-                                        </a>
-                                    {% endif %}
-
-                                    {% if project.note %}
-                                        <span>{{ project.note }}</span>
-                                    {% endif %}
-
-                                    {% include "components/project_star.html" with project=project %}
-
-                                    {% if perms.main.change_project %}
-                                        <a href="{% url 'main:update_project' project.id %}">
-                                            Edit
-                                        </a>
-                                    {% endif %}
-
-                                    {% if user.is_superuser %}
-                                        <button
-                                            type="button"
-                                            class="project-delete-trigger"
-                                            popovertarget="delete-project-{{ project.id }}"
-                                            aria-label="Delete {{ project.title }}"
-                                        >
-                                            Delete
-                                        </button>
-                                    {% endif %}
-                                </div>
-                            </div>
-                        </div>
-
-                        {% if user.is_superuser %}
-                            {% include "components/project_delete_modal.html" with project=project %}
-                        {% endif %}
-
-                        <h2 class="project-mobile-title">
-                            {{ project.title }}
-                        </h2>
-                    </article>
-                {% empty %}
-                    {% if title_query %}
-                        <p class="empty-state">
-                            No projects found for "{{ title_query }}".
-                        </p>
-                    {% else %}
-                        <p class="empty-state">
-                            Belum ada proyek yang ditambahkan.
-                        </p>
-                    {% endif %}
-                {% endfor %}
+            <div id="projects-loading" class="empty-state hide" role="status">
+                <p>Loading projects...</p>
             </div>
+            <div id="projects-error" class="empty-state hide" role="alert">
+                <p>Failed to load projects. Please try again.</p>
+            </div>
+            <div id="projects-empty" class="empty-state hide">
+                <p>No projects have been added or found.</p>
+            </div>
+            <div id="projects-grid" class="project-grid hide"></div>
         </div>
     </section>
 </main>
