@@ -5,7 +5,7 @@ from django.contrib.auth import login, logout
 from django.contrib.auth.decorators import login_required
 from django.contrib.auth.forms import AuthenticationForm, UserCreationForm
 from django.core import serializers
-from django.http import HttpResponse
+from django.http import HttpResponse, JsonResponse
 from django.shortcuts import get_object_or_404, redirect, render
 from django.views.decorators.http import require_POST
 
@@ -22,22 +22,6 @@ EXPERIENCE_PUBLIC_FIELDS = (
     "started_at",
     "ended_at",
 )
-
-PROJECT_PUBLIC_FIELDS = (
-    "title",
-    "role",
-    "description",
-    "thumbnail",
-    "primary_link_label",
-    "primary_link_url",
-    "secondary_link_label",
-    "secondary_link_url",
-    "third_link_label",
-    "third_link_url",
-    "note",
-    "display_order",
-)
-
 
 def register(request):
     form = UserCreationForm(request.POST or None)
@@ -176,31 +160,56 @@ def delete_experience(request, experience_id):
 
 def get_projects_json(request):
     title_query = request.GET.get("title", "").strip()
+    projects = Project.objects.prefetch_related("starred_by").order_by(
+        "display_order",
+        "title",
+    )
+
+    if title_query:
+        projects = projects.filter(title__icontains=title_query)
+
+    data = []
+    for project in projects:
+        starred_users = list(project.starred_by.all())
+        is_starred = request.user.is_authenticated and any(
+            user.pk == request.user.pk for user in starred_users
+        )
+        data.append(
+            {
+                "pk": str(project.id),
+                "fields": {
+                    "title": project.title,
+                    "role": project.role,
+                    "description": project.description,
+                    "thumbnail": project.thumbnail,
+                    "primary_link_label": project.primary_link_label,
+                    "primary_link_url": project.primary_link_url,
+                    "secondary_link_label": project.secondary_link_label,
+                    "secondary_link_url": project.secondary_link_url,
+                    "third_link_label": project.third_link_label,
+                    "third_link_url": project.third_link_url,
+                    "note": project.note,
+                    "display_order": project.display_order,
+                    "star_count": len(starred_users),
+                    "is_starred": is_starred,
+                },
+            }
+        )
+
+    return JsonResponse(data, safe=False)
+
+
+def show_projects(request):
+    title_query = request.GET.get("title", "").strip()
     projects = Project.objects.order_by("display_order", "title")
 
     if title_query:
         projects = projects.filter(title__icontains=title_query)
 
-    projects_json = serializers.serialize(
-        "json",
-        projects,
-        fields=PROJECT_PUBLIC_FIELDS,
-    )
-    return HttpResponse(projects_json, content_type="application/json")
-
-
-def show_projects(request):
-    json_response = get_projects_json(request)
-    serialized_projects = serializers.deserialize(
-        "json",
-        json_response.content.decode("utf-8"),
-    )
-    projects = [serialized_project.object for serialized_project in serialized_projects]
-
     context = {
         "name": "Muhammad Eshan Bobby Bhaskara",
         "project_list": projects,
-        "title_query": request.GET.get("title", "").strip(),
+        "title_query": title_query,
     }
     return render(request, "projects.html", context)
 

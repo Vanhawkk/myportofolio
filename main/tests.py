@@ -706,8 +706,27 @@ class ProjectTest(TestCase):
                 "third_link_url",
                 "note",
                 "display_order",
+                "star_count",
+                "is_starred",
             },
         )
+
+    def test_projects_json_includes_request_user_star_state(self):
+        self.project.starred_by.add(self.regular_user)
+
+        anonymous_response = self.client.get(reverse("main:get_projects_json"))
+        anonymous_fields = json.loads(anonymous_response.content)[0]["fields"]
+
+        self.client.force_login(self.regular_user)
+        authenticated_response = self.client.get(
+            reverse("main:get_projects_json")
+        )
+        authenticated_fields = json.loads(authenticated_response.content)[0]["fields"]
+
+        self.assertEqual(anonymous_fields["star_count"], 1)
+        self.assertFalse(anonymous_fields["is_starred"])
+        self.assertEqual(authenticated_fields["star_count"], 1)
+        self.assertTrue(authenticated_fields["is_starred"])
 
     def test_projects_json_can_filter_by_title(self):
         Project.objects.create(
