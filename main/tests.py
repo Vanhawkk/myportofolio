@@ -683,6 +683,93 @@ class ProjectTest(TestCase):
         self.assertIn("title", response.json()["errors"])
         self.assertEqual(Project.objects.count(), project_count)
 
+    def test_ajax_project_creation_rejects_html_only_title(self):
+        self.client.force_login(self.superuser)
+
+        response = self.client.post(
+            reverse("main:create_project_ajax"),
+            {
+                "title": '<img src="x" onerror="alert(1)">',
+                "role": "Developer",
+                "description": "Attempted stored XSS.",
+                "thumbnail": "/static/img/project-comprof.jpg",
+                "display_order": 2,
+            },
+        )
+
+        self.assertEqual(response.status_code, 400)
+        self.assertIn("title", response.json()["errors"])
+        self.assertFalse(Project.objects.filter(description="Attempted stored XSS.").exists())
+
+    def test_project_form_strips_html_from_text_fields(self):
+        self.client.force_login(self.superuser)
+
+        response = self.client.post(
+            reverse("main:create_project_ajax"),
+            {
+                "title": "<b>Safe Project</b>",
+                "role": "<em>Developer</em>",
+                "description": "Build <strong>securely</strong>.",
+                "thumbnail": "/static/img/project-comprof.jpg",
+                "primary_link_label": "<span>GitHub</span>",
+                "primary_link_url": "https://github.com/example/project",
+                "note": "<i>Reviewed</i>",
+                "display_order": 2,
+            },
+        )
+
+        self.assertEqual(response.status_code, 201)
+        project = Project.objects.get(title="Safe Project")
+        self.assertEqual(project.role, "Developer")
+        self.assertEqual(project.description, "Build securely.")
+        self.assertEqual(project.primary_link_label, "GitHub")
+        self.assertEqual(project.note, "Reviewed")
+
+    def test_project_form_rejects_unsafe_thumbnail_and_link_schemes(self):
+        self.client.force_login(self.superuser)
+        create_url = reverse("main:create_project_ajax")
+        base_payload = {
+            "title": "Unsafe URL Project",
+            "role": "Developer",
+            "description": "Tests unsafe URL validation.",
+            "display_order": 2,
+        }
+
+        thumbnail_response = self.client.post(
+            create_url,
+            {**base_payload, "thumbnail": "javascript:alert(1)"},
+        )
+        link_response = self.client.post(
+            create_url,
+            {
+                **base_payload,
+                "thumbnail": "/static/img/project-comprof.jpg",
+                "primary_link_url": "javascript:alert(1)",
+            },
+        )
+
+        self.assertEqual(thumbnail_response.status_code, 400)
+        self.assertIn("thumbnail", thumbnail_response.json()["errors"])
+        self.assertEqual(link_response.status_code, 400)
+        self.assertIn("primary_link_url", link_response.json()["errors"])
+
+    def test_traditional_project_creation_uses_sanitized_form(self):
+        self.client.force_login(self.superuser)
+
+        response = self.client.post(
+            reverse("main:create_project"),
+            {
+                "title": "<b>Traditional Project</b>",
+                "role": "Developer",
+                "description": "Created through the fallback form.",
+                "thumbnail": "https://example.com/project.jpg",
+                "display_order": 2,
+            },
+        )
+
+        self.assertRedirects(response, reverse("main:show_projects"))
+        self.assertTrue(Project.objects.filter(title="Traditional Project").exists())
+
     def test_ajax_project_creation_rejects_unauthorized_roles_with_json(self):
         create_url = reverse("main:create_project_ajax")
 

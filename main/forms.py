@@ -1,4 +1,9 @@
+import re
+
+from django.core.exceptions import ValidationError
+from django.core.validators import URLValidator
 from django.forms import ModelForm, NumberInput, Textarea, TextInput, URLInput
+from django.utils.html import strip_tags
 
 from main.models import Experience, Project
 
@@ -86,3 +91,50 @@ class ProjectForm(ModelForm):
             "note": TextInput(attrs={"placeholder": "Optional note"}),
             "display_order": NumberInput(attrs={"min": 0}),
         }
+
+    def clean_title(self):
+        title = strip_tags(self.cleaned_data["title"]).strip()
+        if not title:
+            raise ValidationError("Project title cannot contain only HTML tags.")
+        return title
+
+    def clean_role(self):
+        role = strip_tags(self.cleaned_data["role"]).strip()
+        if not role:
+            raise ValidationError("Project role cannot contain only HTML tags.")
+        return role
+
+    def clean_description(self):
+        description = strip_tags(self.cleaned_data["description"]).strip()
+        if not description:
+            raise ValidationError(
+                "Project description cannot contain only HTML tags."
+            )
+        return description
+
+    def clean_thumbnail(self):
+        thumbnail = strip_tags(self.cleaned_data["thumbnail"]).strip()
+
+        if thumbnail.startswith("/static/"):
+            is_safe_static_path = re.fullmatch(
+                r"/static/[A-Za-z0-9_./-]+",
+                thumbnail,
+            )
+            if is_safe_static_path and ".." not in thumbnail.split("/"):
+                return thumbnail
+            raise ValidationError("Enter a safe static image path.")
+
+        URLValidator(schemes=["http", "https"])(thumbnail)
+        return thumbnail
+
+    def clean_primary_link_label(self):
+        return strip_tags(self.cleaned_data["primary_link_label"]).strip()
+
+    def clean_secondary_link_label(self):
+        return strip_tags(self.cleaned_data["secondary_link_label"]).strip()
+
+    def clean_third_link_label(self):
+        return strip_tags(self.cleaned_data["third_link_label"]).strip()
+
+    def clean_note(self):
+        return strip_tags(self.cleaned_data["note"]).strip()
