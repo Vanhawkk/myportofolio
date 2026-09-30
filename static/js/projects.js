@@ -53,6 +53,11 @@
         gridContainer.classList.toggle("hide", !showGrid);
     }
 
+    function closeProjectModal() {
+        const modal = document.getElementById("add-project-modal");
+        if (modal?.matches(":popover-open")) modal.hidePopover();
+    }
+
     function buildLink(url, label) {
         if (!url) return "";
 

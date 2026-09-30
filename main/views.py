@@ -205,6 +205,7 @@ def show_projects(request):
     context = {
         "name": "Muhammad Eshan Bobby Bhaskara",
         "title_query": title_query,
+        "form": ProjectForm(),
     }
     return render(request, "projects.html", context)
 

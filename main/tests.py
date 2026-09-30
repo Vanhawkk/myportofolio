@@ -937,12 +937,32 @@ class ProjectTest(TestCase):
 
         response = self.client.get(reverse("main:show_projects"))
 
-        self.assertContains(
-            response,
-            f'href="{reverse("main:create_project")}"',
-        )
+        self.assertContains(response, 'popovertarget="add-project-modal"')
+        self.assertContains(response, 'id="add-project-modal"')
         self.assertContains(response, 'data-can-edit="true"')
         self.assertContains(response, 'data-is-superuser="true"')
+
+    def test_project_creation_modal_is_only_rendered_for_superuser(self):
+        anonymous_response = self.client.get(reverse("main:show_projects"))
+        self.assertNotContains(anonymous_response, 'id="add-project-modal"')
+
+        self.client.force_login(self.regular_user)
+        regular_response = self.client.get(reverse("main:show_projects"))
+        self.assertNotContains(regular_response, 'id="add-project-modal"')
+
+        self.client.force_login(self.editor)
+        editor_response = self.client.get(reverse("main:show_projects"))
+        self.assertNotContains(editor_response, 'id="add-project-modal"')
+
+        self.client.force_login(self.superuser)
+        owner_response = self.client.get(reverse("main:show_projects"))
+        self.assertContains(owner_response, 'id="add-project-modal"')
+        self.assertContains(owner_response, 'id="project-form"')
+        self.assertContains(
+            owner_response,
+            f'action="{reverse("main:create_project")}"',
+        )
+        self.assertContains(owner_response, "csrfmiddlewaretoken")
 
     def test_anonymous_user_is_redirected_from_toggle_star(self):
         star_url = reverse("main:toggle_star", args=[self.project.id])
