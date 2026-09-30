@@ -15,6 +15,7 @@
         id="projects-app"
         class="projects-section"
         data-projects-endpoint="{% url 'main:get_projects_json' %}"
+        data-create-project-endpoint="{% url 'main:create_project_ajax' %}"
         data-star-url-template="{% url 'main:toggle_star' '00000000-0000-0000-0000-000000000000' %}"
         data-edit-url-template="{% url 'main:update_project' '00000000-0000-0000-0000-000000000000' %}"
         data-delete-url-template="{% url 'main:delete_project' '00000000-0000-0000-0000-000000000000' %}"

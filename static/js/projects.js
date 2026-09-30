@@ -8,6 +8,7 @@
     const SEARCH_DEBOUNCE_DELAY = 300;
     const config = {
         projectsEndpoint: app.dataset.projectsEndpoint,
+        createProjectEndpoint: app.dataset.createProjectEndpoint,
         starUrlTemplate: app.dataset.starUrlTemplate,
         editUrlTemplate: app.dataset.editUrlTemplate,
         deleteUrlTemplate: app.dataset.deleteUrlTemplate,
@@ -24,6 +25,7 @@
     const gridContainer = document.getElementById("projects-grid");
     const searchForm = document.getElementById("project-search-form");
     const searchInput = document.getElementById("search-input");
+    const projectForm = document.getElementById("project-form");
 
     let projectsAbortController;
     let searchDebounceTimer;
@@ -56,6 +58,18 @@
     function closeProjectModal() {
         const modal = document.getElementById("add-project-modal");
         if (modal?.matches(":popover-open")) modal.hidePopover();
+    }
+
+    function getCookie(name) {
+        const cookies = document.cookie ? document.cookie.split(";") : [];
+
+        for (const item of cookies) {
+            const cookie = item.trim();
+            if (cookie.startsWith(`${name}=`)) {
+                return decodeURIComponent(cookie.substring(name.length + 1));
+            }
+        }
+        return null;
     }
 
     function buildLink(url, label) {
@@ -190,6 +204,52 @@
         }
     }
 
+    async function addProject(event) {
+        event.preventDefault();
+        const submitButton = projectForm.querySelector('button[type="submit"]');
+        submitButton.disabled = true;
+
+        try {
+            const response = await fetch(config.createProjectEndpoint, {
+                method: "POST",
+                headers: {
+                    "X-CSRFToken": getCookie("csrftoken") || config.csrfToken,
+                    Accept: "application/json",
+                },
+                body: new FormData(projectForm),
+            });
+            const result = await response.json().catch(() => ({}));
+
+            if (!response.ok) {
+                const errorMessages = result.errors
+                    ? Object.values(result.errors)
+                        .flat()
+                        .map((error) => error.message)
+                    : [result.message || `Request failed (HTTP ${response.status}).`];
+                showToast(
+                    "Failed to add project",
+                    errorMessages.join(" "),
+                    "error",
+                );
+                return;
+            }
+
+            projectForm.reset();
+            closeProjectModal();
+            showToast("Success", result.message, "success");
+            await fetchProjects(searchInput.value.trim());
+        } catch (error) {
+            console.error("Error adding project:", error);
+            showToast(
+                "Failed to add project",
+                "Could not connect to the server. Please try again.",
+                "error",
+            );
+        } finally {
+            submitButton.disabled = false;
+        }
+    }
+
     function searchProjects() {
         const searchQuery = searchInput.value.trim();
         const browserUrl = new URL(window.location.href);
@@ -213,6 +273,10 @@
         clearTimeout(searchDebounceTimer);
         searchProjects();
     });
+
+    if (projectForm) {
+        projectForm.addEventListener("submit", addProject);
+    }
 
     fetchProjects(searchInput.value.trim());
 })();

@@ -228,6 +228,31 @@ def create_project(request):
     return render(request, "projects_form.html", context)
 
 
+@require_POST
+def create_project_ajax(request):
+    if not request.user.is_superuser:
+        return JsonResponse(
+            {"message": "Only the portfolio owner can add projects."},
+            status=403,
+        )
+
+    form = ProjectForm(request.POST)
+    if form.is_valid():
+        project = form.save()
+        return JsonResponse(
+            {
+                "message": "Project added successfully.",
+                "pk": str(project.id),
+            },
+            status=201,
+        )
+
+    return JsonResponse(
+        {"errors": form.errors.get_json_data()},
+        status=400,
+    )
+
+
 @editor_or_superuser_required("main.change_project")
 def update_project(request, project_id):
     project = get_object_or_404(Project, pk=project_id)

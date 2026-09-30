@@ -3,7 +3,7 @@ import re
 import uuid
 
 from django.contrib.auth.models import Group, Permission, User
-from django.test import TestCase
+from django.test import Client, TestCase
 from django.urls import reverse
 from django.utils import timezone
 
@@ -643,6 +643,95 @@ class ProjectTest(TestCase):
         self.assertTemplateUsed(response, "projects_form.html")
         self.assertContains(response, "This field is required.")
         self.assertEqual(Project.objects.count(), project_count)
+
+    def test_superuser_can_create_project_with_ajax(self):
+        self.client.force_login(self.superuser)
+
+        response = self.client.post(
+            reverse("main:create_project_ajax"),
+            {
+                "title": "AJAX Portfolio",
+                "role": "Developer",
+                "description": "Created without a page reload.",
+                "thumbnail": "/static/img/project-comprof.jpg",
+                "display_order": 2,
+            },
+        )
+
+        self.assertEqual(response.status_code, 201)
+        self.assertEqual(response["Content-Type"], "application/json")
+        data = response.json()
+        project = Project.objects.get(title="AJAX Portfolio")
+        self.assertEqual(data["pk"], str(project.id))
+
+    def test_ajax_project_creation_returns_form_errors(self):
+        self.client.force_login(self.superuser)
+        project_count = Project.objects.count()
+
+        response = self.client.post(
+            reverse("main:create_project_ajax"),
+            {
+                "title": "",
+                "role": "Developer",
+                "description": "Missing a required title.",
+                "thumbnail": "/static/img/project-comprof.jpg",
+                "display_order": 2,
+            },
+        )
+
+        self.assertEqual(response.status_code, 400)
+        self.assertIn("title", response.json()["errors"])
+        self.assertEqual(Project.objects.count(), project_count)
+
+    def test_ajax_project_creation_rejects_unauthorized_roles_with_json(self):
+        create_url = reverse("main:create_project_ajax")
+
+        anonymous_response = self.client.post(create_url, {})
+        self.assertEqual(anonymous_response.status_code, 403)
+        self.assertEqual(anonymous_response["Content-Type"], "application/json")
+
+        for user in (self.regular_user, self.editor):
+            self.client.force_login(user)
+            response = self.client.post(create_url, {})
+
+            with self.subTest(user=user):
+                self.assertEqual(response.status_code, 403)
+                self.assertEqual(response["Content-Type"], "application/json")
+
+    def test_ajax_project_creation_rejects_get(self):
+        self.client.force_login(self.superuser)
+
+        response = self.client.get(reverse("main:create_project_ajax"))
+
+        self.assertEqual(response.status_code, 405)
+
+    def test_ajax_project_creation_requires_valid_csrf_token(self):
+        csrf_client = Client(enforce_csrf_checks=True)
+        csrf_client.force_login(self.superuser)
+        create_url = reverse("main:create_project_ajax")
+        payload = {
+            "title": "CSRF Protected Project",
+            "role": "Developer",
+            "description": "Created with a valid CSRF header.",
+            "thumbnail": "/static/img/project-comprof.jpg",
+            "display_order": 2,
+        }
+
+        rejected_response = csrf_client.post(create_url, payload)
+        self.assertEqual(rejected_response.status_code, 403)
+
+        csrf_client.get(reverse("main:show_projects"))
+        csrf_token = csrf_client.cookies["csrftoken"].value
+        accepted_response = csrf_client.post(
+            create_url,
+            payload,
+            HTTP_X_CSRFTOKEN=csrf_token,
+        )
+
+        self.assertEqual(accepted_response.status_code, 201)
+        self.assertTrue(
+            Project.objects.filter(title="CSRF Protected Project").exists()
+        )
 
     def test_update_project_page_is_prefilled(self):
         self.client.force_login(self.superuser)
