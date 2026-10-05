@@ -5,6 +5,7 @@
     if (!app) return;
 
     const DUMMY_UUID = "00000000-0000-0000-0000-000000000000";
+    const SEARCH_DEBOUNCE_DELAY = 300;
     const config = {
         experiencesEndpoint: app.dataset.experiencesEndpoint,
         starUrlTemplate: app.dataset.starUrlTemplate,
@@ -21,6 +22,11 @@
     const errorState = document.getElementById("experiences-error");
     const emptyState = document.getElementById("experiences-empty");
     const gridContainer = document.getElementById("experiences-grid");
+    const searchForm = document.getElementById("experience-search-form");
+    const searchInput = document.getElementById("experience-search-input");
+
+    let experiencesAbortController;
+    let searchDebounceTimer;
 
     function escapeHtml(value) {
         return String(value ?? "")
@@ -128,11 +134,21 @@
         return articleElement;
     }
 
-    async function fetchExperiences() {
+    async function fetchExperiences(searchQuery = "") {
+        if (experiencesAbortController) experiencesAbortController.abort();
+        experiencesAbortController = new AbortController();
+
         try {
             displayPageSection({ showLoading: true });
-            const response = await fetch(config.experiencesEndpoint, {
+            const url = new URL(
+                config.experiencesEndpoint,
+                window.location.origin,
+            );
+            if (searchQuery) url.searchParams.set("q", searchQuery);
+
+            const response = await fetch(url, {
                 headers: { Accept: "application/json" },
+                signal: experiencesAbortController.signal,
             });
             if (!response.ok) throw new Error(`HTTP ${response.status}`);
 
@@ -149,10 +165,38 @@
             });
             displayPageSection({ showGrid: true });
         } catch (error) {
+            if (error.name === "AbortError") return;
             console.error("Error loading experiences:", error);
             displayPageSection({ showError: true });
         }
     }
 
-    fetchExperiences();
+    function searchExperiences() {
+        const searchQuery = searchInput.value.trim();
+        const browserUrl = new URL(window.location.href);
+
+        if (searchQuery) {
+            browserUrl.searchParams.set("q", searchQuery);
+        } else {
+            browserUrl.searchParams.delete("q");
+        }
+        window.history.replaceState({}, "", browserUrl);
+        fetchExperiences(searchQuery);
+    }
+
+    searchInput.addEventListener("input", () => {
+        clearTimeout(searchDebounceTimer);
+        searchDebounceTimer = setTimeout(
+            searchExperiences,
+            SEARCH_DEBOUNCE_DELAY,
+        );
+    });
+
+    searchForm.addEventListener("submit", (event) => {
+        event.preventDefault();
+        clearTimeout(searchDebounceTimer);
+        searchExperiences();
+    });
+
+    fetchExperiences(searchInput.value.trim());
 })();

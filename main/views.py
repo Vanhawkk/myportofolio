@@ -129,6 +129,7 @@ def get_experiences_json(request):
 def show_experience(request):
     context = {
         "name": "Muhammad Eshan Bobby Bhaskara",
+        "search_query": request.GET.get("q", "").strip(),
     }
     return render(request, "experience.html", context)
 

@@ -38,6 +38,23 @@
                     {% endif %}
                 </div>
 
+                <form
+                    id="experience-search-form"
+                    class="experience-search"
+                    role="search"
+                >
+                    <input
+                        type="search"
+                        id="experience-search-input"
+                        name="q"
+                        value="{{ search_query }}"
+                        placeholder="Search experiences"
+                        class="experience-search__input"
+                        aria-label="Search experiences"
+                    >
+                    <button type="submit" class="button">Search</button>
+                </form>
+
                 <div id="experiences-loading" class="empty-state hide" role="status">
                     <p>Loading experiences...</p>
                 </div>

@@ -206,6 +206,8 @@ class MainTest(TestCase):
         self.assertContains(response, 'id="experiences-error"')
         self.assertContains(response, 'id="experiences-empty"')
         self.assertContains(response, 'id="experiences-grid"')
+        self.assertContains(response, 'id="experience-search-form"')
+        self.assertContains(response, 'id="experience-search-input"')
         self.assertContains(response, "js/experiences.js")
         self.assertContains(
             response,
@@ -213,6 +215,15 @@ class MainTest(TestCase):
         )
         self.assertNotContains(response, self.experience.title)
         self.assertNotContains(response, self.experience.description)
+
+    def test_experience_page_preserves_search_query(self):
+        response = self.client.get(
+            reverse("main:show_experience"),
+            {"q": "  research  "},
+        )
+
+        self.assertContains(response, 'name="q"')
+        self.assertContains(response, 'value="research"')
 
     def test_empty_experience_state_is_available(self):
         Experience.objects.all().delete()

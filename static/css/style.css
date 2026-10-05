@@ -789,13 +789,15 @@ main > section {
     line-height: 1;
 }
 
-.project-search {
+.project-search,
+.experience-search {
     display: flex;
     gap: 0.75rem;
     margin-bottom: 1.5rem;
 }
 
-.project-search__input {
+.project-search__input,
+.experience-search__input {
     width: 100%;
     min-width: 0;
     padding: 0.7rem;
@@ -806,7 +808,8 @@ main > section {
     font: inherit;
 }
 
-.project-search__input:focus {
+.project-search__input:focus,
+.experience-search__input:focus {
     border-color: var(--accent);
     outline: none;
     box-shadow: 0 0 0 3px rgba(91, 127, 166, 0.2);
@@ -1218,11 +1221,13 @@ main > section {
         width: 100%;
     }
 
-    .project-search {
+    .project-search,
+    .experience-search {
         flex-direction: column;
     }
 
-    .project-search .button {
+    .project-search .button,
+    .experience-search .button {
         width: 100%;
     }
 
