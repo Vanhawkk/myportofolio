@@ -43,6 +43,7 @@
                             {% else %}
                                 <p class="experience-status">Done</p>
                             {% endif %}
+                            {% include "components/experience_star.html" with experience=experience %}
                             {% if perms.main.change_experience %}
                                 <div class="experience-actions">
                                     <a

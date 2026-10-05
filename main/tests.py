@@ -526,6 +526,108 @@ class ExperienceAuthorizationTest(TestCase):
         self.assertContains(response, f'action="{self.delete_url}"')
 
 
+class ExperienceStarTest(TestCase):
+    def setUp(self):
+        self.regular_user = User.objects.create_user(username="regular_user")
+        self.editor = User.objects.create_user(username="experience_editor")
+        self.superuser = User.objects.create_superuser(
+            username="portfolio_owner",
+            password="StrongPassword123!",
+            email="owner@example.com",
+        )
+        self.experience = Experience.objects.create(
+            title="Starred Experience",
+            description="Used to verify experience starring.",
+            category="volunteer",
+        )
+        self.star_url = reverse(
+            "main:toggle_experience_star",
+            args=[self.experience.id],
+        )
+
+    def test_anonymous_user_is_redirected_without_changing_star(self):
+        response = self.client.post(self.star_url)
+
+        self.assertRedirects(
+            response,
+            f'{reverse("main:login")}?next={self.star_url}',
+            fetch_redirect_response=False,
+        )
+        self.assertEqual(self.experience.starred_by.count(), 0)
+
+    def test_authenticated_user_can_star_and_unstar_experience(self):
+        self.client.force_login(self.regular_user)
+
+        star_response = self.client.post(self.star_url)
+
+        self.assertRedirects(star_response, reverse("main:show_experience"))
+        self.assertTrue(
+            self.experience.starred_by.filter(pk=self.regular_user.pk).exists()
+        )
+        self.assertTrue(
+            self.regular_user.starred_experiences.filter(
+                pk=self.experience.pk
+            ).exists()
+        )
+
+        unstar_response = self.client.post(self.star_url)
+
+        self.assertRedirects(unstar_response, reverse("main:show_experience"))
+        self.assertFalse(
+            self.experience.starred_by.filter(pk=self.regular_user.pk).exists()
+        )
+
+    def test_get_request_is_rejected_without_changing_star(self):
+        self.client.force_login(self.regular_user)
+
+        response = self.client.get(self.star_url)
+
+        self.assertEqual(response.status_code, 405)
+        self.assertEqual(self.experience.starred_by.count(), 0)
+
+    def test_all_authenticated_roles_can_star_experience(self):
+        for user in (self.regular_user, self.editor, self.superuser):
+            with self.subTest(user=user.username):
+                self.client.force_login(user)
+                response = self.client.post(self.star_url)
+
+                self.assertRedirects(
+                    response,
+                    reverse("main:show_experience"),
+                )
+                self.assertTrue(
+                    self.experience.starred_by.filter(pk=user.pk).exists()
+                )
+
+    def test_experience_page_shows_star_state_count_and_csrf(self):
+        self.experience.starred_by.add(self.regular_user, self.superuser)
+        self.client.force_login(self.regular_user)
+
+        response = self.client.get(reverse("main:show_experience"))
+
+        self.assertContains(response, f'action="{self.star_url}"')
+        self.assertContains(response, "csrfmiddlewaretoken")
+        self.assertContains(response, "Unstar")
+        self.assertContains(
+            response,
+            '<span class="star-count">2</span>',
+            html=True,
+        )
+
+    def test_guest_sees_login_prompt_and_star_count(self):
+        self.experience.starred_by.add(self.regular_user)
+
+        response = self.client.get(reverse("main:show_experience"))
+
+        self.assertContains(response, f'href="{reverse("main:login")}"')
+        self.assertContains(response, "Login to star")
+        self.assertContains(
+            response,
+            '<span class="star-count">1</span>',
+            html=True,
+        )
+
+
 class ProjectTest(TestCase):
     def setUp(self):
         self.password = "StrongPassword123!"
