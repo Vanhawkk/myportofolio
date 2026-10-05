@@ -127,14 +127,8 @@ def get_experiences_json(request):
 
 
 def show_experience(request):
-    experiences = Experience.objects.prefetch_related("starred_by").order_by(
-        "-started_at",
-        "title",
-    )
-
     context = {
         "name": "Muhammad Eshan Bobby Bhaskara",
-        "experience_list": list(experiences),
     }
     return render(request, "experience.html", context)
 

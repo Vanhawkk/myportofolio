@@ -196,31 +196,41 @@ class MainTest(TestCase):
         self.assertEqual(self.experience.category, "part-time")
         self.assertTrue(self.experience.is_ongoing)
 
-    def test_experience_page(self):
+    def test_experience_page_contains_ajax_shell(self):
         response = self.client.get(reverse("main:show_experience"))
+
         self.assertEqual(response.status_code, 200)
         self.assertTemplateUsed(response, "experience.html")
-        self.assertContains(response, self.experience.title)
-        self.assertContains(response, self.experience.description)
-        self.assertContains(response, "Part-Time")
-        self.assertContains(response, "Ongoing")
+        self.assertContains(response, 'id="experiences-app"')
+        self.assertContains(response, 'id="experiences-loading"')
+        self.assertContains(response, 'id="experiences-error"')
+        self.assertContains(response, 'id="experiences-empty"')
+        self.assertContains(response, 'id="experiences-grid"')
+        self.assertContains(response, "js/experiences.js")
         self.assertContains(
             response,
-            f'href="{reverse("main:show_main")}"',
+            f'data-experiences-endpoint="{reverse("main:get_experiences_json")}"',
         )
+        self.assertNotContains(response, self.experience.title)
+        self.assertNotContains(response, self.experience.description)
 
-    def test_empty_experience_page(self):
+    def test_empty_experience_state_is_available(self):
         Experience.objects.all().delete()
+
         response = self.client.get(reverse("main:show_experience"))
+
         self.assertContains(response, "Belum ada pengalaman yang ditambahkan.")
 
-    def test_completed_experience(self):
+    def test_completed_experience_is_exposed_in_json(self):
         self.experience.ended_at = timezone.now()
         self.experience.save()
-        response = self.client.get(reverse("main:show_experience"))
+
+        response = self.client.get(reverse("main:get_experiences_json"))
+
         self.assertFalse(self.experience.is_ongoing)
-        self.assertContains(response, "Done")
-        self.assertNotContains(response, "Ongoing")
+        fields = response.json()[0]["fields"]
+        self.assertFalse(fields["is_ongoing"])
+        self.assertIsNotNone(fields["ended_at"])
 
     def test_create_experience_page_is_accessible(self):
         self.client.force_login(self.superuser)
@@ -311,17 +321,23 @@ class MainTest(TestCase):
 
         self.assertEqual(response.status_code, 404)
 
-    def test_experience_page_shows_thumbnail_and_actions(self):
-        self.experience.thumbnail = "https://example.com/experience.jpg"
-        self.experience.save()
+    def test_experience_page_exposes_superuser_action_configuration(self):
         self.client.force_login(self.superuser)
 
         response = self.client.get(reverse("main:show_experience"))
-        update_url = reverse("main:update_experience", args=[self.experience.id])
+        dummy_id = "00000000-0000-0000-0000-000000000000"
 
-        self.assertContains(response, self.experience.thumbnail)
         self.assertContains(response, f'href="{reverse("main:create_experience")}"')
-        self.assertContains(response, f'href="{update_url}"')
+        self.assertContains(
+            response,
+            f'data-edit-url-template="{reverse("main:update_experience", args=[dummy_id])}"',
+        )
+        self.assertContains(
+            response,
+            f'data-delete-url-template="{reverse("main:delete_experience", args=[dummy_id])}"',
+        )
+        self.assertContains(response, 'data-is-superuser="true"')
+        self.assertContains(response, 'data-can-edit="true"')
 
     def test_experiences_json_endpoint(self):
         response = self.client.get(reverse("main:get_experiences_json"))
@@ -361,14 +377,10 @@ class MainTest(TestCase):
 
         self.assertEqual(json.loads(response.content), [])
 
-    def test_experience_page_uses_model_objects(self):
+    def test_experience_page_does_not_render_experience_context(self):
         response = self.client.get(reverse("main:show_experience"))
-        experience_list = response.context["experience_list"]
 
-        self.assertIsInstance(experience_list, list)
-        self.assertEqual(len(experience_list), 1)
-        self.assertIsInstance(experience_list[0], Experience)
-        self.assertEqual(experience_list[0].id, self.experience.id)
+        self.assertNotIn("experience_list", response.context)
 
     def test_experiences_json_searches_title_description_and_category(self):
         matching_experiences = [
@@ -436,14 +448,16 @@ class MainTest(TestCase):
         self.assertNotContains(response, self.superuser.username)
         self.assertNotContains(response, self.superuser.email)
 
-    def test_experience_page_contains_delete_confirmation(self):
+    def test_experience_page_contains_dynamic_delete_configuration(self):
         self.client.force_login(self.superuser)
         response = self.client.get(reverse("main:show_experience"))
-        delete_url = reverse("main:delete_experience", args=[self.experience.id])
+        dummy_id = "00000000-0000-0000-0000-000000000000"
 
-        self.assertContains(response, "Delete Experience?")
-        self.assertContains(response, f'action="{delete_url}"')
-        self.assertContains(response, "csrfmiddlewaretoken")
+        self.assertContains(
+            response,
+            f'data-delete-url-template="{reverse("main:delete_experience", args=[dummy_id])}"',
+        )
+        self.assertContains(response, "data-csrf-token=")
 
     def test_delete_experience_with_post(self):
         self.client.force_login(self.superuser)
@@ -513,7 +527,7 @@ class ExperienceAuthorizationTest(TestCase):
         response = self.client.get(self.list_url)
 
         self.assertEqual(response.status_code, 200)
-        self.assertContains(response, self.experience.title)
+        self.assertContains(response, 'id="experiences-app"')
 
     def test_anonymous_user_is_redirected_from_experience_mutations(self):
         responses = [
@@ -570,15 +584,15 @@ class ExperienceAuthorizationTest(TestCase):
         anonymous_response = self.client.get(self.list_url)
 
         self.assertNotContains(anonymous_response, f'href="{self.create_url}"')
-        self.assertNotContains(anonymous_response, f'href="{self.update_url}"')
-        self.assertNotContains(anonymous_response, f'action="{self.delete_url}"')
+        self.assertContains(anonymous_response, 'data-can-edit="false"')
+        self.assertContains(anonymous_response, 'data-is-superuser="false"')
 
         self.client.force_login(self.regular_user)
         regular_response = self.client.get(self.list_url)
 
         self.assertNotContains(regular_response, f'href="{self.create_url}"')
-        self.assertNotContains(regular_response, f'href="{self.update_url}"')
-        self.assertNotContains(regular_response, f'action="{self.delete_url}"')
+        self.assertContains(regular_response, 'data-can-edit="false"')
+        self.assertContains(regular_response, 'data-is-superuser="false"')
 
     def test_editor_sees_only_experience_update_control(self):
         self.client.force_login(self.editor)
@@ -586,8 +600,8 @@ class ExperienceAuthorizationTest(TestCase):
         response = self.client.get(self.list_url)
 
         self.assertNotContains(response, f'href="{self.create_url}"')
-        self.assertContains(response, f'href="{self.update_url}"')
-        self.assertNotContains(response, f'action="{self.delete_url}"')
+        self.assertContains(response, 'data-can-edit="true"')
+        self.assertContains(response, 'data-is-superuser="false"')
 
     def test_superuser_sees_all_experience_controls(self):
         self.client.force_login(self.superuser)
@@ -595,8 +609,8 @@ class ExperienceAuthorizationTest(TestCase):
         response = self.client.get(self.list_url)
 
         self.assertContains(response, f'href="{self.create_url}"')
-        self.assertContains(response, f'href="{self.update_url}"')
-        self.assertContains(response, f'action="{self.delete_url}"')
+        self.assertContains(response, 'data-can-edit="true"')
+        self.assertContains(response, 'data-is-superuser="true"')
 
 
 class ExperienceStarTest(TestCase):
@@ -672,33 +686,27 @@ class ExperienceStarTest(TestCase):
                     self.experience.starred_by.filter(pk=user.pk).exists()
                 )
 
-    def test_experience_page_shows_star_state_count_and_csrf(self):
-        self.experience.starred_by.add(self.regular_user, self.superuser)
+    def test_authenticated_experience_page_exposes_star_configuration(self):
         self.client.force_login(self.regular_user)
 
         response = self.client.get(reverse("main:show_experience"))
+        dummy_id = "00000000-0000-0000-0000-000000000000"
 
-        self.assertContains(response, f'action="{self.star_url}"')
-        self.assertContains(response, "csrfmiddlewaretoken")
-        self.assertContains(response, "Unstar")
         self.assertContains(
             response,
-            '<span class="star-count">2</span>',
-            html=True,
+            f'data-star-url-template="{reverse("main:toggle_experience_star", args=[dummy_id])}"',
         )
+        self.assertContains(response, "data-csrf-token=")
+        self.assertContains(response, 'data-is-authenticated="true"')
 
-    def test_guest_sees_login_prompt_and_star_count(self):
-        self.experience.starred_by.add(self.regular_user)
-
+    def test_guest_experience_page_exposes_login_configuration(self):
         response = self.client.get(reverse("main:show_experience"))
 
-        self.assertContains(response, f'href="{reverse("main:login")}"')
-        self.assertContains(response, "Login to star")
         self.assertContains(
             response,
-            '<span class="star-count">1</span>',
-            html=True,
+            f'data-login-url="{reverse("main:login")}"',
         )
+        self.assertContains(response, 'data-is-authenticated="false"')
 
 
 class ProjectTest(TestCase):

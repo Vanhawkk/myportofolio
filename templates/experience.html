@@ -1,12 +1,29 @@
 {% extends "base.html" %}
+{% load static %}
 
 {% block meta %}
     <title>Experience - {{ name }}</title>
 {% endblock meta %}
 
+{% block scripts %}
+    <script src="{% static 'js/experiences.js' %}" defer></script>
+{% endblock scripts %}
+
 {% block content %}
     <main>
-        <section class="experience-section" id="experience">
+        <section
+            id="experiences-app"
+            class="experience-section"
+            data-experiences-endpoint="{% url 'main:get_experiences_json' %}"
+            data-star-url-template="{% url 'main:toggle_experience_star' '00000000-0000-0000-0000-000000000000' %}"
+            data-edit-url-template="{% url 'main:update_experience' '00000000-0000-0000-0000-000000000000' %}"
+            data-delete-url-template="{% url 'main:delete_experience' '00000000-0000-0000-0000-000000000000' %}"
+            data-login-url="{% url 'main:login' %}"
+            data-csrf-token="{{ csrf_token }}"
+            data-is-authenticated="{{ user.is_authenticated|yesno:'true,false' }}"
+            data-is-superuser="{{ user.is_superuser|yesno:'true,false' }}"
+            data-can-edit="{{ perms.main.change_experience|yesno:'true,false' }}"
+        >
             <div class="container">
                 <div class="experience-header">
                     <div>
@@ -21,58 +38,16 @@
                     {% endif %}
                 </div>
 
-                <div class="experience-grid">
-                    {% for experience in experience_list %}
-                        <article class="experience-card">
-                            {% if experience.thumbnail %}
-                                <img
-                                    src="{{ experience.thumbnail }}"
-                                    alt="Thumbnail for {{ experience.title }}"
-                                    class="experience-image"
-                                >
-                            {% endif %}
-                            <span class="experience-category">
-                                {{ experience.get_category_display }}
-                            </span>
-                            <h2>{{ experience.title }}</h2>
-                            <p class="experience-description">
-                                {{ experience.description }}
-                            </p>
-                            {% if experience.is_ongoing %}
-                                <p class="experience-status">Ongoing</p>
-                            {% else %}
-                                <p class="experience-status">Done</p>
-                            {% endif %}
-                            {% include "components/experience_star.html" with experience=experience %}
-                            {% if perms.main.change_experience %}
-                                <div class="experience-actions">
-                                    <a
-                                        href="{% url 'main:update_experience' experience.id %}"
-                                        class="button button-secondary"
-                                    >
-                                        Edit
-                                    </a>
-                                    {% if user.is_superuser %}
-                                        <button
-                                            type="button"
-                                            class="button button-danger"
-                                            popovertarget="delete-experience-{{ experience.id }}"
-                                        >
-                                            Delete
-                                        </button>
-                                    {% endif %}
-                                </div>
-                            {% endif %}
-                            {% if user.is_superuser %}
-                                {% include "components/experience_delete_modal.html" with experience=experience %}
-                            {% endif %}
-                        </article>
-                    {% empty %}
-                        <p class="empty-state">
-                            Belum ada pengalaman yang ditambahkan.
-                        </p>
-                    {% endfor %}
+                <div id="experiences-loading" class="empty-state hide" role="status">
+                    <p>Loading experiences...</p>
                 </div>
+                <div id="experiences-error" class="empty-state hide" role="alert">
+                    <p>Failed to load experiences. Please try again.</p>
+                </div>
+                <div id="experiences-empty" class="empty-state hide">
+                    <p>Belum ada pengalaman yang ditambahkan.</p>
+                </div>
+                <div id="experiences-grid" class="experience-grid hide"></div>
             </div>
         </section>
     </main>
