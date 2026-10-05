@@ -36,6 +36,31 @@ class ExperienceForm(ModelForm):
             ),
         }
 
+    def clean_title(self):
+        title = strip_tags(self.cleaned_data["title"]).strip()
+        if not title:
+            raise ValidationError(
+                "Experience title cannot contain only HTML tags."
+            )
+        return title
+
+    def clean_description(self):
+        description = strip_tags(self.cleaned_data["description"]).strip()
+        if not description:
+            raise ValidationError(
+                "Experience description cannot contain only HTML tags."
+            )
+        return description
+
+    def clean_thumbnail(self):
+        thumbnail = self.cleaned_data.get("thumbnail")
+        if not thumbnail:
+            return thumbnail
+
+        thumbnail = strip_tags(thumbnail).strip()
+        URLValidator(schemes=["http", "https"])(thumbnail)
+        return thumbnail
+
 
 class ProjectForm(ModelForm):
     class Meta:

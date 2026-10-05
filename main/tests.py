@@ -680,6 +680,96 @@ class ExperienceAuthorizationTest(TestCase):
         self.assertIn("title", response.json()["errors"])
         self.assertEqual(Experience.objects.count(), experience_count)
 
+    def test_ajax_experience_creation_rejects_html_only_text(self):
+        self.client.force_login(self.superuser)
+        create_ajax_url = reverse("main:create_experience_ajax")
+
+        title_response = self.client.post(
+            create_ajax_url,
+            {
+                "title": '<img src="x" onerror="alert(1)">',
+                "description": "Attempted stored XSS.",
+                "category": "internship",
+            },
+        )
+        description_response = self.client.post(
+            create_ajax_url,
+            {
+                "title": "Unsafe Description",
+                "description": '<img src="x" onerror="alert(1)">',
+                "category": "internship",
+            },
+        )
+
+        self.assertEqual(title_response.status_code, 400)
+        self.assertIn("title", title_response.json()["errors"])
+        self.assertEqual(description_response.status_code, 400)
+        self.assertIn("description", description_response.json()["errors"])
+        self.assertFalse(
+            Experience.objects.filter(
+                description="Attempted stored XSS."
+            ).exists()
+        )
+
+    def test_ajax_experience_creation_strips_html_from_text_fields(self):
+        self.client.force_login(self.superuser)
+
+        response = self.client.post(
+            reverse("main:create_experience_ajax"),
+            {
+                "title": "<b>Research Assistant</b>",
+                "description": "Studied <strong>platform security</strong>.",
+                "category": "research",
+                "thumbnail": "https://example.com/research.jpg",
+            },
+        )
+
+        self.assertEqual(response.status_code, 201)
+        experience = Experience.objects.get(title="Research Assistant")
+        self.assertEqual(
+            experience.description,
+            "Studied platform security.",
+        )
+
+    def test_ajax_experience_creation_rejects_unsafe_thumbnail_scheme(self):
+        self.client.force_login(self.superuser)
+
+        response = self.client.post(
+            reverse("main:create_experience_ajax"),
+            {
+                "title": "Unsafe Thumbnail",
+                "description": "Tests unsafe URL validation.",
+                "category": "research",
+                "thumbnail": "ftp://example.com/thumbnail.jpg",
+            },
+        )
+
+        self.assertEqual(response.status_code, 400)
+        self.assertIn("thumbnail", response.json()["errors"])
+        self.assertFalse(
+            Experience.objects.filter(title="Unsafe Thumbnail").exists()
+        )
+
+    def test_traditional_experience_creation_uses_sanitized_form(self):
+        self.client.force_login(self.superuser)
+
+        response = self.client.post(
+            self.create_url,
+            {
+                "title": "<em>Traditional Experience</em>",
+                "description": "Created through the <b>fallback form</b>.",
+                "category": "volunteer",
+                "thumbnail": "https://example.com/traditional.jpg",
+            },
+        )
+
+        self.assertRedirects(response, self.list_url)
+        experience = Experience.objects.get(title="Traditional Experience")
+        self.assertEqual(
+            experience.description,
+            "Created through the fallback form.",
+        )
+
     def test_ajax_experience_creation_rejects_unauthorized_roles_with_json(self):
         create_ajax_url = reverse("main:create_experience_ajax")
 
