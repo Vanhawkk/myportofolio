@@ -8,6 +8,7 @@
     const SEARCH_DEBOUNCE_DELAY = 300;
     const config = {
         experiencesEndpoint: app.dataset.experiencesEndpoint,
+        createExperienceEndpoint: app.dataset.createExperienceEndpoint,
         starUrlTemplate: app.dataset.starUrlTemplate,
         editUrlTemplate: app.dataset.editUrlTemplate,
         deleteUrlTemplate: app.dataset.deleteUrlTemplate,
@@ -24,6 +25,7 @@
     const gridContainer = document.getElementById("experiences-grid");
     const searchForm = document.getElementById("experience-search-form");
     const searchInput = document.getElementById("experience-search-input");
+    const experienceForm = document.getElementById("experience-form");
 
     let experiencesAbortController;
     let searchDebounceTimer;
@@ -41,6 +43,18 @@
         return template.replace(DUMMY_UUID, encodeURIComponent(experienceId));
     }
 
+    function getCookie(name) {
+        const cookies = document.cookie ? document.cookie.split(";") : [];
+
+        for (const item of cookies) {
+            const cookie = item.trim();
+            if (cookie.startsWith(`${name}=`)) {
+                return decodeURIComponent(cookie.substring(name.length + 1));
+            }
+        }
+        return null;
+    }
+
     function displayPageSection({
         showLoading = false,
         showError = false,
@@ -51,6 +65,11 @@
         errorState.classList.toggle("hide", !showError);
         emptyState.classList.toggle("hide", !showEmpty);
         gridContainer.classList.toggle("hide", !showGrid);
+    }
+
+    function closeExperienceModal() {
+        const modal = document.getElementById("add-experience-modal");
+        if (modal?.matches(":popover-open")) modal.hidePopover();
     }
 
     function buildStarControl(experience, experienceId) {
@@ -171,6 +190,59 @@
         }
     }
 
+    async function addExperience(event) {
+        event.preventDefault();
+        const submitButton = experienceForm.querySelector(
+            'button[type="submit"]',
+        );
+        submitButton.disabled = true;
+
+        try {
+            const response = await fetch(config.createExperienceEndpoint, {
+                method: "POST",
+                headers: {
+                    "X-CSRFToken": (
+                        getCookie("csrftoken") || config.csrfToken
+                    ),
+                    Accept: "application/json",
+                },
+                body: new FormData(experienceForm),
+            });
+            const result = await response.json().catch(() => ({}));
+
+            if (!response.ok) {
+                const errorMessages = result.errors
+                    ? Object.values(result.errors)
+                        .flat()
+                        .map((error) => error.message)
+                    : [
+                        result.message
+                        || `Request failed (HTTP ${response.status}).`,
+                    ];
+                showToast(
+                    "Failed to add experience",
+                    errorMessages.join(" "),
+                    "error",
+                );
+                return;
+            }
+
+            experienceForm.reset();
+            closeExperienceModal();
+            showToast("Success", result.message, "success");
+            await fetchExperiences(searchInput.value.trim());
+        } catch (error) {
+            console.error("Error adding experience:", error);
+            showToast(
+                "Failed to add experience",
+                "Could not connect to the server. Please try again.",
+                "error",
+            );
+        } finally {
+            submitButton.disabled = false;
+        }
+    }
+
     function searchExperiences() {
         const searchQuery = searchInput.value.trim();
         const browserUrl = new URL(window.location.href);
@@ -197,6 +269,10 @@
         clearTimeout(searchDebounceTimer);
         searchExperiences();
     });
+
+    if (experienceForm) {
+        experienceForm.addEventListener("submit", addExperience);
+    }
 
     fetchExperiences(searchInput.value.trim());
 })();

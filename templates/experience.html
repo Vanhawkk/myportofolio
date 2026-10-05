@@ -15,6 +15,7 @@
             id="experiences-app"
             class="experience-section"
             data-experiences-endpoint="{% url 'main:get_experiences_json' %}"
+            data-create-experience-endpoint="{% url 'main:create_experience_ajax' %}"
             data-star-url-template="{% url 'main:toggle_experience_star' '00000000-0000-0000-0000-000000000000' %}"
             data-edit-url-template="{% url 'main:update_experience' '00000000-0000-0000-0000-000000000000' %}"
             data-delete-url-template="{% url 'main:delete_experience' '00000000-0000-0000-0000-000000000000' %}"

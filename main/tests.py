@@ -635,10 +635,106 @@ class ExperienceAuthorizationTest(TestCase):
 
         self.assertContains(response, 'id="experience-form"')
         self.assertContains(response, f'action="{self.create_url}"')
+        self.assertContains(
+            response,
+            f'data-create-experience-endpoint="{reverse("main:create_experience_ajax")}"',
+        )
         self.assertContains(response, "csrfmiddlewaretoken")
         self.assertEqual(
             list(response.context["form"].fields),
             ["title", "description", "category", "thumbnail"],
+        )
+
+    def test_superuser_can_create_experience_with_ajax(self):
+        self.client.force_login(self.superuser)
+
+        response = self.client.post(
+            reverse("main:create_experience_ajax"),
+            {
+                "title": "AJAX Experience",
+                "description": "Created without reloading the page.",
+                "category": "internship",
+                "thumbnail": "https://example.com/ajax-experience.jpg",
+            },
+        )
+
+        self.assertEqual(response.status_code, 201)
+        self.assertEqual(response["Content-Type"], "application/json")
+        experience = Experience.objects.get(title="AJAX Experience")
+        self.assertEqual(response.json()["pk"], str(experience.id))
+
+    def test_ajax_experience_creation_returns_form_errors(self):
+        self.client.force_login(self.superuser)
+        experience_count = Experience.objects.count()
+
+        response = self.client.post(
+            reverse("main:create_experience_ajax"),
+            {
+                "title": "",
+                "description": "Missing a required title.",
+                "category": "internship",
+            },
+        )
+
+        self.assertEqual(response.status_code, 400)
+        self.assertIn("title", response.json()["errors"])
+        self.assertEqual(Experience.objects.count(), experience_count)
+
+    def test_ajax_experience_creation_rejects_unauthorized_roles_with_json(self):
+        create_ajax_url = reverse("main:create_experience_ajax")
+
+        anonymous_response = self.client.post(create_ajax_url, {})
+        self.assertEqual(anonymous_response.status_code, 403)
+        self.assertEqual(
+            anonymous_response["Content-Type"],
+            "application/json",
+        )
+
+        for user in (self.regular_user, self.editor):
+            self.client.force_login(user)
+            response = self.client.post(create_ajax_url, {})
+
+            with self.subTest(user=user.username):
+                self.assertEqual(response.status_code, 403)
+                self.assertEqual(
+                    response["Content-Type"],
+                    "application/json",
+                )
+
+    def test_ajax_experience_creation_rejects_get(self):
+        self.client.force_login(self.superuser)
+
+        response = self.client.get(reverse("main:create_experience_ajax"))
+
+        self.assertEqual(response.status_code, 405)
+
+    def test_ajax_experience_creation_requires_valid_csrf_token(self):
+        csrf_client = Client(enforce_csrf_checks=True)
+        csrf_client.force_login(self.superuser)
+        create_ajax_url = reverse("main:create_experience_ajax")
+        payload = {
+            "title": "CSRF Protected Experience",
+            "description": "Created with a valid CSRF header.",
+            "category": "research",
+            "thumbnail": "https://example.com/csrf-experience.jpg",
+        }
+
+        rejected_response = csrf_client.post(create_ajax_url, payload)
+        self.assertEqual(rejected_response.status_code, 403)
+
+        csrf_client.get(self.list_url)
+        csrf_token = csrf_client.cookies["csrftoken"].value
+        accepted_response = csrf_client.post(
+            create_ajax_url,
+            payload,
+            HTTP_X_CSRFTOKEN=csrf_token,
+        )
+
+        self.assertEqual(accepted_response.status_code, 201)
+        self.assertTrue(
+            Experience.objects.filter(
+                title="CSRF Protected Experience"
+            ).exists()
         )
 
 
