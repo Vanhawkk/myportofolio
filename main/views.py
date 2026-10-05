@@ -131,6 +131,9 @@ def show_experience(request):
         "name": "Muhammad Eshan Bobby Bhaskara",
         "search_query": request.GET.get("q", "").strip(),
     }
+    if request.user.is_superuser:
+        context["form"] = ExperienceForm()
+
     return render(request, "experience.html", context)
 
 

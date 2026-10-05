@@ -338,7 +338,8 @@ class MainTest(TestCase):
         response = self.client.get(reverse("main:show_experience"))
         dummy_id = "00000000-0000-0000-0000-000000000000"
 
-        self.assertContains(response, f'href="{reverse("main:create_experience")}"')
+        self.assertContains(response, 'popovertarget="add-experience-modal"')
+        self.assertContains(response, 'id="add-experience-modal"')
         self.assertContains(
             response,
             f'data-edit-url-template="{reverse("main:update_experience", args=[dummy_id])}"',
@@ -595,6 +596,7 @@ class ExperienceAuthorizationTest(TestCase):
         anonymous_response = self.client.get(self.list_url)
 
         self.assertNotContains(anonymous_response, f'href="{self.create_url}"')
+        self.assertNotContains(anonymous_response, 'id="add-experience-modal"')
         self.assertContains(anonymous_response, 'data-can-edit="false"')
         self.assertContains(anonymous_response, 'data-is-superuser="false"')
 
@@ -602,6 +604,7 @@ class ExperienceAuthorizationTest(TestCase):
         regular_response = self.client.get(self.list_url)
 
         self.assertNotContains(regular_response, f'href="{self.create_url}"')
+        self.assertNotContains(regular_response, 'id="add-experience-modal"')
         self.assertContains(regular_response, 'data-can-edit="false"')
         self.assertContains(regular_response, 'data-is-superuser="false"')
 
@@ -611,6 +614,7 @@ class ExperienceAuthorizationTest(TestCase):
         response = self.client.get(self.list_url)
 
         self.assertNotContains(response, f'href="{self.create_url}"')
+        self.assertNotContains(response, 'id="add-experience-modal"')
         self.assertContains(response, 'data-can-edit="true"')
         self.assertContains(response, 'data-is-superuser="false"')
 
@@ -619,9 +623,23 @@ class ExperienceAuthorizationTest(TestCase):
 
         response = self.client.get(self.list_url)
 
-        self.assertContains(response, f'href="{self.create_url}"')
+        self.assertContains(response, 'popovertarget="add-experience-modal"')
+        self.assertContains(response, 'id="add-experience-modal"')
         self.assertContains(response, 'data-can-edit="true"')
         self.assertContains(response, 'data-is-superuser="true"')
+
+    def test_experience_creation_modal_uses_fallback_form_action(self):
+        self.client.force_login(self.superuser)
+
+        response = self.client.get(self.list_url)
+
+        self.assertContains(response, 'id="experience-form"')
+        self.assertContains(response, f'action="{self.create_url}"')
+        self.assertContains(response, "csrfmiddlewaretoken")
+        self.assertEqual(
+            list(response.context["form"].fields),
+            ["title", "description", "category", "thumbnail"],
+        )
 
 
 class ExperienceStarTest(TestCase):
