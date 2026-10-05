@@ -12,7 +12,8 @@ Website portofolio pribadi berbasis Django yang menampilkan profil, pendidikan, 
 - CRUD Experience dan Project dengan pembatasan hak akses di sisi server.
 - Registrasi, login, logout, session, dan cookie `last_login`.
 - Role Editor melalui Django Group dan permission bawaan Django.
-- Fitur star/unstar Project untuk pengguna yang sudah login.
+- Fitur star/unstar Project dan Experience untuk pengguna yang sudah login.
+- Halaman Project dan Experience menggunakan AJAX untuk menampilkan data, mencari tanpa memuat ulang halaman, dan menambahkan data melalui modal.
 - Endpoint JSON publik dengan allowlist field untuk mencegah kebocoran data user.
 - Test otomatis untuk model, autentikasi, CRUD, JSON, dan matriks authorization.
 
@@ -58,10 +59,14 @@ Yang dibantu AI:
 
 - Claude membantu diskusi awal mengenai pilihan warna dan tampilan website.
 - AI membantu struktur awal CSS Grid, timeline, dan efek hover pada card.
-- Codex membantu membaca spesifikasi Tugas 3 dan Tugas 4, memetakan kondisi repository, lalu membagi implementasi menjadi commit kecil.
-- Codex membantu membuat helper authorization, view update Project, kondisi permission pada template, dan test matriks role.
-- Codex membantu menemukan bahwa serializer Project mengirim relasi `starred_by` sebagai username, lalu membantu menggantinya dengan allowlist field public.
+- AI membantu membaca spesifikasi Tugas 3 dan Tugas 4, membandingkannya dengan kondisi repository, serta membagi implementasi menjadi langkah kecil.
+- AI membantu menyusun helper authorization, view update Project, kondisi permission pada template, dan test matriks role.
+- AI membantu menemukan bahwa serializer Project ikut mengirim username dari relasi `starred_by`, lalu membantu menggantinya dengan daftar field publik yang dipilih secara eksplisit.
 - AI membantu menjelaskan JSON, CSRF, permission Django, HTTP 403, serta merapikan pesan commit.
+- AI digunakan untuk membantu memahami alur implementasi AJAX, pencarian dengan debounce, dan integrasi endpoint JSON pada fitur Experience.
+- AI digunakan sebagai bantuan untuk mengecek potensi XSS, terutama saat data dari user dirender kembali menggunakan JavaScript.
+- AI membantu memberi masukan terkait validasi form, URL thumbnail, serta penambahan rentang tanggal Experience.
+- Seluruh implementasi, pengujian, dan penyesuaian kode tetap ditinjau kembali agar sesuai dengan kebutuhan project.
 
 Strategi prompting yang saya gunakan adalah memberikan dokumen tugas dan source code yang sudah ada, meminta AI menjelaskan gap implementasi, lalu membantu saya mengerjakan step by step tasknya. Setiap langkah dibatasi ke scope tertentu dan diminta menjalankan targeted test serta full test sebelum commit.
 
@@ -112,3 +117,11 @@ Jadi di browser membuka proyek lalu di balik layar browser akan request URL proj
 3. Saat `/api/experiences/` dibuka, URL tersebut akan menjalankan fungsi `get_experiences_json`. Fungsi ini akan mengambil data Experience dari database menggunakan `Experience.objects.order_by(...)`. Hasilnya masih berbentuk QuerySet dan berisi object model Django. Setelah itu `serializers.serialize("json", experiences)` mengubah data tersebut menjadi teks JSON. Teks JSON kemudian dikirim sebagai response menggunakan `HttpResponse` dengan tipe `application/json`.
 
 Proses serialization diperlukan karena object model Django tidak bisa langsung dikirim melalui HTTP dan dibaca oleh browser sebagai JSON. Object tersebut harus diubah dulu menjadi format teks yang berisi model, id, dan fields. Pada halaman Experience, JSON itu diubah kembali menggunakan `serializers.deserialize`, lalu object hasilnya dikirim ke template melalui context. Pada tugas ini proses tersebut memang terasa berulang, tetapi tujuannya untuk memahami proses pengiriman data antara server dan client.
+
+### Tugas 5
+
+1. Debouncing adalah teknik untuk menunda eksekusi fungsi sampai user berhenti melakukan input dalam waktu tertentu. Pada pencarian AJAX, debouncing penting agar aplikasi tidak mengirim request ke server pada setiap huruf yang diketik. Di project ini, pencarian Experience baru dijalankan setelah user berhenti mengetik selama 300 ms, sehingga request lebih hemat dan hasil pencarian lebih stabil.
+
+2. `await` digunakan untuk menunggu Promise dari `fetch()` selesai sebelum kode melanjutkan ke proses berikutnya. Contohnya, `await fetch()` memastikan response dari server sudah diterima, lalu `await response.json()` memastikan data JSON sudah selesai dibaca. Jika `await` tidak digunakan, variabel tersebut masih berupa Promise sehingga data belum bisa dipakai secara langsung dan dapat menyebabkan error atau urutan proses yang tidak sesuai.
+
+3. XSS (Cross-Site Scripting) adalah celah keamanan ketika input user berisi kode HTML atau JavaScript berbahaya yang kemudian dirender oleh website. Risiko ini lebih besar pada AJAX/JavaScript karena data sering dimasukkan ke halaman menggunakan `innerHTML`, yang dapat menganggap input tersebut sebagai HTML aktif. Sementara itu, Django template secara default melakukan escaping terhadap karakter berbahaya. Untuk mengurangi risiko XSS, input Experience dibersihkan di server menggunakan `strip_tags`, URL thumbnail divalidasi, dan teks yang dirender melalui JavaScript di-escape terlebih dahulu.
