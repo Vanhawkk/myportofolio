@@ -331,10 +331,13 @@ class MainTest(TestCase):
 
         data = json.loads(response.content)
         self.assertEqual(len(data), 1)
-        self.assertEqual(data[0]["model"], "main.experience")
         self.assertEqual(data[0]["pk"], str(self.experience.id))
         self.assertEqual(data[0]["fields"]["title"], self.experience.title)
         self.assertEqual(data[0]["fields"]["category"], "part-time")
+        self.assertEqual(data[0]["fields"]["category_label"], "Part-Time")
+        self.assertTrue(data[0]["fields"]["is_ongoing"])
+        self.assertEqual(data[0]["fields"]["star_count"], 0)
+        self.assertFalse(data[0]["fields"]["is_starred"])
         self.assertEqual(
             set(data[0]["fields"]),
             {
@@ -344,6 +347,10 @@ class MainTest(TestCase):
                 "thumbnail",
                 "started_at",
                 "ended_at",
+                "category_label",
+                "is_ongoing",
+                "star_count",
+                "is_starred",
             },
         )
 
@@ -354,7 +361,7 @@ class MainTest(TestCase):
 
         self.assertEqual(json.loads(response.content), [])
 
-    def test_experience_page_uses_deserialized_objects(self):
+    def test_experience_page_uses_model_objects(self):
         response = self.client.get(reverse("main:show_experience"))
         experience_list = response.context["experience_list"]
 
@@ -362,6 +369,72 @@ class MainTest(TestCase):
         self.assertEqual(len(experience_list), 1)
         self.assertIsInstance(experience_list[0], Experience)
         self.assertEqual(experience_list[0].id, self.experience.id)
+
+    def test_experiences_json_searches_title_description_and_category(self):
+        matching_experiences = [
+            Experience.objects.create(
+                title="Research Assistant",
+                description="Studied platform engineering.",
+                category="research",
+            ),
+            Experience.objects.create(
+                title="Design Volunteer",
+                description="Helped a research community.",
+                category="volunteer",
+            ),
+            Experience.objects.create(
+                title="Backend Engineer",
+                description="Built internal tools.",
+                category="freelance",
+            ),
+        ]
+
+        cases = {
+            "assistant": {matching_experiences[0].id},
+            "community": {matching_experiences[1].id},
+            "freelance": {matching_experiences[2].id},
+        }
+        for query, expected_ids in cases.items():
+            with self.subTest(query=query):
+                response = self.client.get(
+                    reverse("main:get_experiences_json"),
+                    {"q": query},
+                )
+                returned_ids = {
+                    uuid.UUID(item["pk"])
+                    for item in json.loads(response.content)
+                }
+                self.assertEqual(returned_ids, expected_ids)
+
+    def test_experiences_json_ignores_surrounding_search_whitespace(self):
+        response = self.client.get(
+            reverse("main:get_experiences_json"),
+            {"q": "  asisten dosen  "},
+        )
+
+        data = json.loads(response.content)
+        self.assertEqual([item["pk"] for item in data], [str(self.experience.id)])
+
+    def test_experiences_json_includes_current_users_star_state(self):
+        self.experience.starred_by.add(self.superuser)
+        self.client.force_login(self.superuser)
+
+        response = self.client.get(reverse("main:get_experiences_json"))
+
+        fields = json.loads(response.content)[0]["fields"]
+        self.assertEqual(fields["star_count"], 1)
+        self.assertTrue(fields["is_starred"])
+
+    def test_experiences_json_does_not_expose_users_who_starred(self):
+        self.experience.starred_by.add(self.superuser)
+
+        response = self.client.get(reverse("main:get_experiences_json"))
+
+        data = json.loads(response.content)
+        self.assertNotIn("starred_by", data[0]["fields"])
+        self.assertNotIn("password", data[0]["fields"])
+        self.assertNotContains(response, self.superuser.username)
+        self.assertNotContains(response, self.superuser.email)
 
     def test_experience_page_contains_delete_confirmation(self):
         self.client.force_login(self.superuser)

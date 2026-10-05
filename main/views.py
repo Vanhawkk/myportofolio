@@ -4,8 +4,8 @@ from django.contrib import messages
 from django.contrib.auth import login, logout
 from django.contrib.auth.decorators import login_required
 from django.contrib.auth.forms import AuthenticationForm, UserCreationForm
-from django.core import serializers
-from django.http import HttpResponse, JsonResponse
+from django.db.models import BooleanField, Count, Exists, OuterRef, Q, Value
+from django.http import JsonResponse
 from django.shortcuts import get_object_or_404, redirect, render
 from django.views.decorators.http import require_POST
 
@@ -13,15 +13,6 @@ from main.forms import ExperienceForm, ProjectForm
 from main.models import Experience, Project
 from main.permissions import editor_or_superuser_required, superuser_required
 
-
-EXPERIENCE_PUBLIC_FIELDS = (
-    "title",
-    "description",
-    "category",
-    "thumbnail",
-    "started_at",
-    "ended_at",
-)
 
 def register(request):
     form = UserCreationForm(request.POST or None)
@@ -85,29 +76,65 @@ def show_main(request):
 
 
 def get_experiences_json(request):
-    experiences = Experience.objects.order_by("-started_at", "title")
-    experiences_json = serializers.serialize(
-        "json",
-        experiences,
-        fields=EXPERIENCE_PUBLIC_FIELDS,
-    )
-    return HttpResponse(experiences_json, content_type="application/json")
+    query = request.GET.get("q", "").strip()
+    experiences = Experience.objects.annotate(
+        star_count=Count("starred_by", distinct=True),
+    ).order_by("-started_at", "title")
+
+    if query:
+        experiences = experiences.filter(
+            Q(title__icontains=query)
+            | Q(description__icontains=query)
+            | Q(category__icontains=query)
+        )
+
+    if request.user.is_authenticated:
+        starred_experiences = request.user.starred_experiences.filter(
+            pk=OuterRef("pk")
+        )
+        experiences = experiences.annotate(
+            is_starred=Exists(starred_experiences),
+        )
+    else:
+        experiences = experiences.annotate(
+            is_starred=Value(False, output_field=BooleanField()),
+        )
+
+    data = [
+        {
+            "pk": str(experience.id),
+            "fields": {
+                "title": experience.title,
+                "description": experience.description,
+                "category": experience.category,
+                "category_label": experience.get_category_display(),
+                "thumbnail": experience.thumbnail,
+                "started_at": experience.started_at.isoformat(),
+                "ended_at": (
+                    experience.ended_at.isoformat()
+                    if experience.ended_at
+                    else None
+                ),
+                "is_ongoing": experience.is_ongoing,
+                "star_count": experience.star_count,
+                "is_starred": experience.is_starred,
+            },
+        }
+        for experience in experiences
+    ]
+
+    return JsonResponse(data, safe=False)
 
 
 def show_experience(request):
-    json_response = get_experiences_json(request)
-    serialized_experiences = serializers.deserialize(
-        "json",
-        json_response.content.decode("utf-8"),
+    experiences = Experience.objects.prefetch_related("starred_by").order_by(
+        "-started_at",
+        "title",
     )
-    experiences = [
-        serialized_experience.object
-        for serialized_experience in serialized_experiences
-    ]
 
     context = {
         "name": "Muhammad Eshan Bobby Bhaskara",
-        "experience_list": experiences,
+        "experience_list": list(experiences),
     }
     return render(request, "experience.html", context)
 
