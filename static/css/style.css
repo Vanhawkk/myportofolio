@@ -534,8 +534,14 @@ main > section {
     color: var(--text-muted);
 }
 
-.experience-status {
+.experience-period {
     margin-top: 1rem;
+    color: var(--text-muted);
+    font-size: 0.85rem;
+}
+
+.experience-status {
+    margin-top: 0.25rem;
     font-size: 0.85rem;
     font-weight: 600;
 }

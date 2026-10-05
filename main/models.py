@@ -2,6 +2,7 @@ import uuid
 
 from django.contrib.auth.models import User
 from django.db import models
+from django.utils import timezone
 
 
 class Experience(models.Model):
@@ -23,8 +24,8 @@ class Experience(models.Model):
         default='full-time',
     )
     thumbnail = models.URLField(blank=True, null=True)
-    started_at = models.DateTimeField(auto_now_add=True)
-    ended_at = models.DateTimeField(blank=True, null=True)
+    started_at = models.DateField(default=timezone.localdate)
+    ended_at = models.DateField(blank=True, null=True)
     starred_by = models.ManyToManyField(
         User,
         related_name="starred_experiences",
@@ -37,7 +38,8 @@ class Experience(models.Model):
     @property
     def is_ongoing(self):
         return self.ended_at is None
-    
+
+
 class Project(models.Model):
     id = models.UUIDField(
         primary_key=True,

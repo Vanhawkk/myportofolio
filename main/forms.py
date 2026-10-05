@@ -2,7 +2,14 @@ import re
 
 from django.core.exceptions import ValidationError
 from django.core.validators import URLValidator
-from django.forms import ModelForm, NumberInput, Textarea, TextInput, URLInput
+from django.forms import (
+    DateInput,
+    ModelForm,
+    NumberInput,
+    Textarea,
+    TextInput,
+    URLInput,
+)
 from django.utils.html import strip_tags
 
 from main.models import Experience, Project
@@ -15,12 +22,16 @@ class ExperienceForm(ModelForm):
             "title",
             "description",
             "category",
+            "started_at",
+            "ended_at",
             "thumbnail",
         ]
         labels = {
             "title": "Experience title",
             "description": "Description",
             "category": "Category",
+            "started_at": "Start date",
+            "ended_at": "End date (leave blank if ongoing)",
             "thumbnail": "Thumbnail URL",
         }
         widgets = {
@@ -31,6 +42,8 @@ class ExperienceForm(ModelForm):
                     "rows": 4,
                 }
             ),
+            "started_at": DateInput(attrs={"type": "date"}),
+            "ended_at": DateInput(attrs={"type": "date"}),
             "thumbnail": URLInput(
                 attrs={"placeholder": "https://example.com/image.jpg"}
             ),
@@ -60,6 +73,19 @@ class ExperienceForm(ModelForm):
         thumbnail = strip_tags(thumbnail).strip()
         URLValidator(schemes=["http", "https"])(thumbnail)
         return thumbnail
+
+    def clean(self):
+        cleaned_data = super().clean()
+        started_at = cleaned_data.get("started_at")
+        ended_at = cleaned_data.get("ended_at")
+
+        if started_at and ended_at and ended_at < started_at:
+            self.add_error(
+                "ended_at",
+                "End date cannot be earlier than start date.",
+            )
+
+        return cleaned_data
 
 
 class ProjectForm(ModelForm):

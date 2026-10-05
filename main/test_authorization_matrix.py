@@ -42,6 +42,8 @@ class PortfolioAuthorizationMatrixTest(TestCase):
             "title": title,
             "description": "Updated experience description.",
             "category": "part-time",
+            "started_at": "2025-01-01",
+            "ended_at": "",
             "thumbnail": "",
         }
 

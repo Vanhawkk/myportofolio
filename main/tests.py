@@ -1,6 +1,7 @@
 import json
 import re
 import uuid
+from datetime import date
 
 from django.contrib.auth.models import Group, Permission, User
 from django.test import Client, TestCase
@@ -194,6 +195,7 @@ class MainTest(TestCase):
     def test_experience_model(self):
         self.assertEqual(str(self.experience), "Asisten Dosen PBP")
         self.assertEqual(self.experience.category, "part-time")
+        self.assertIsInstance(self.experience.started_at, date)
         self.assertTrue(self.experience.is_ongoing)
 
     def test_experience_page_contains_ajax_shell(self):
@@ -233,7 +235,7 @@ class MainTest(TestCase):
         self.assertContains(response, "Belum ada pengalaman yang ditambahkan.")
 
     def test_completed_experience_is_exposed_in_json(self):
-        self.experience.ended_at = timezone.now()
+        self.experience.ended_at = timezone.localdate()
         self.experience.save()
 
         response = self.client.get(reverse("main:get_experiences_json"))
@@ -253,8 +255,16 @@ class MainTest(TestCase):
         self.assertContains(response, "csrfmiddlewaretoken")
         self.assertEqual(
             list(response.context["form"].fields),
-            ["title", "description", "category", "thumbnail"],
+            [
+                "title",
+                "description",
+                "category",
+                "started_at",
+                "ended_at",
+                "thumbnail",
+            ],
         )
+        self.assertContains(response, 'type="date"', count=2)
 
     def test_create_experience_with_valid_data(self):
         self.client.force_login(self.superuser)
@@ -264,15 +274,18 @@ class MainTest(TestCase):
                 "title": "Product Design Intern",
                 "description": "Designed and tested product flows.",
                 "category": "internship",
+                "started_at": "2025-01-15",
+                "ended_at": "",
                 "thumbnail": "https://example.com/internship.jpg",
             },
             follow=True,
         )
 
         self.assertRedirects(response, reverse("main:show_experience"))
-        self.assertTrue(
-            Experience.objects.filter(title="Product Design Intern").exists()
-        )
+        experience = Experience.objects.get(title="Product Design Intern")
+        self.assertEqual(experience.started_at, date(2025, 1, 15))
+        self.assertIsNone(experience.ended_at)
+        self.assertTrue(experience.is_ongoing)
         self.assertContains(response, "Experience added successfully!")
 
     def test_create_experience_with_invalid_data(self):
@@ -284,6 +297,8 @@ class MainTest(TestCase):
                 "title": "",
                 "description": "Missing a required title.",
                 "category": "internship",
+                "started_at": "2025-01-15",
+                "ended_at": "",
             },
         )
 
@@ -312,6 +327,8 @@ class MainTest(TestCase):
                 "title": "Teaching Assistant PBP",
                 "description": "Helped students learn Django.",
                 "category": "part-time",
+                "started_at": "2024-01-10",
+                "ended_at": "2025-08-20",
                 "thumbnail": "https://example.com/teaching.jpg",
             },
             follow=True,
@@ -322,7 +339,33 @@ class MainTest(TestCase):
         self.assertEqual(Experience.objects.count(), experience_count)
         self.assertEqual(self.experience.title, "Teaching Assistant PBP")
         self.assertEqual(self.experience.description, "Helped students learn Django.")
+        self.assertEqual(self.experience.started_at, date(2024, 1, 10))
+        self.assertEqual(self.experience.ended_at, date(2025, 8, 20))
+        self.assertFalse(self.experience.is_ongoing)
         self.assertContains(response, "Experience updated successfully!")
+
+    def test_update_experience_rejects_end_before_start(self):
+        self.client.force_login(self.superuser)
+
+        response = self.client.post(
+            reverse("main:update_experience", args=[self.experience.id]),
+            {
+                "title": self.experience.title,
+                "description": self.experience.description,
+                "category": self.experience.category,
+                "started_at": "2025-12-31",
+                "ended_at": "2025-01-01",
+                "thumbnail": "",
+            },
+        )
+
+        self.assertEqual(response.status_code, 200)
+        self.assertContains(
+            response,
+            "End date cannot be earlier than start date.",
+        )
+        self.experience.refresh_from_db()
+        self.assertIsNone(self.experience.ended_at)
 
     def test_update_experience_returns_404_for_unknown_id(self):
         self.client.force_login(self.superuser)
@@ -363,6 +406,10 @@ class MainTest(TestCase):
         self.assertEqual(data[0]["fields"]["title"], self.experience.title)
         self.assertEqual(data[0]["fields"]["category"], "part-time")
         self.assertEqual(data[0]["fields"]["category_label"], "Part-Time")
+        self.assertEqual(
+            data[0]["fields"]["started_at"],
+            self.experience.started_at.isoformat(),
+        )
         self.assertTrue(data[0]["fields"]["is_ongoing"])
         self.assertEqual(data[0]["fields"]["star_count"], 0)
         self.assertFalse(data[0]["fields"]["is_starred"])
@@ -577,6 +624,8 @@ class ExperienceAuthorizationTest(TestCase):
                 "title": "Updated by Editor",
                 "description": self.experience.description,
                 "category": self.experience.category,
+                "started_at": self.experience.started_at.isoformat(),
+                "ended_at": "",
                 "thumbnail": "",
             },
         )
@@ -642,7 +691,14 @@ class ExperienceAuthorizationTest(TestCase):
         self.assertContains(response, "csrfmiddlewaretoken")
         self.assertEqual(
             list(response.context["form"].fields),
-            ["title", "description", "category", "thumbnail"],
+            [
+                "title",
+                "description",
+                "category",
+                "started_at",
+                "ended_at",
+                "thumbnail",
+            ],
         )
 
     def test_superuser_can_create_experience_with_ajax(self):
@@ -654,6 +710,8 @@ class ExperienceAuthorizationTest(TestCase):
                 "title": "AJAX Experience",
                 "description": "Created without reloading the page.",
                 "category": "internship",
+                "started_at": "2025-06-01",
+                "ended_at": "",
                 "thumbnail": "https://example.com/ajax-experience.jpg",
             },
         )
@@ -662,6 +720,8 @@ class ExperienceAuthorizationTest(TestCase):
         self.assertEqual(response["Content-Type"], "application/json")
         experience = Experience.objects.get(title="AJAX Experience")
         self.assertEqual(response.json()["pk"], str(experience.id))
+        self.assertEqual(experience.started_at, date(2025, 6, 1))
+        self.assertTrue(experience.is_ongoing)
 
     def test_ajax_experience_creation_returns_form_errors(self):
         self.client.force_login(self.superuser)
@@ -673,12 +733,56 @@ class ExperienceAuthorizationTest(TestCase):
                 "title": "",
                 "description": "Missing a required title.",
                 "category": "internship",
+                "started_at": "2025-06-01",
+                "ended_at": "",
             },
         )
 
         self.assertEqual(response.status_code, 400)
         self.assertIn("title", response.json()["errors"])
         self.assertEqual(Experience.objects.count(), experience_count)
+
+    def test_ajax_experience_creation_rejects_invalid_date(self):
+        self.client.force_login(self.superuser)
+
+        response = self.client.post(
+            reverse("main:create_experience_ajax"),
+            {
+                "title": "Invalid Date Experience",
+                "description": "The start date is not a date.",
+                "category": "internship",
+                "started_at": "not-a-date",
+                "ended_at": "",
+                "thumbnail": "",
+            },
+        )
+
+        self.assertEqual(response.status_code, 400)
+        self.assertIn("started_at", response.json()["errors"])
+        self.assertFalse(
+            Experience.objects.filter(title="Invalid Date Experience").exists()
+        )
+
+    def test_ajax_experience_creation_rejects_end_before_start(self):
+        self.client.force_login(self.superuser)
+
+        response = self.client.post(
+            reverse("main:create_experience_ajax"),
+            {
+                "title": "Invalid Date Range",
+                "description": "The end date is before the start date.",
+                "category": "research",
+                "started_at": "2025-12-31",
+                "ended_at": "2025-01-01",
+                "thumbnail": "",
+            },
+        )
+
+        self.assertEqual(response.status_code, 400)
+        self.assertIn("ended_at", response.json()["errors"])
+        self.assertFalse(
+            Experience.objects.filter(title="Invalid Date Range").exists()
+        )
 
     def test_ajax_experience_creation_rejects_html_only_text(self):
         self.client.force_login(self.superuser)
@@ -690,6 +794,8 @@ class ExperienceAuthorizationTest(TestCase):
                 "title": '<img src="x" onerror="alert(1)">',
                 "description": "Attempted stored XSS.",
                 "category": "internship",
+                "started_at": "2025-06-01",
+                "ended_at": "",
             },
         )
         description_response = self.client.post(
@@ -698,6 +804,8 @@ class ExperienceAuthorizationTest(TestCase):
                 "title": "Unsafe Description",
                 "description": '<img src="x" onerror="alert(1)">',
                 "category": "internship",
+                "started_at": "2025-06-01",
+                "ended_at": "",
             },
         )
 
@@ -720,6 +828,8 @@ class ExperienceAuthorizationTest(TestCase):
                 "title": "<b>Research Assistant</b>",
                 "description": "Studied <strong>platform security</strong>.",
                 "category": "research",
+                "started_at": "2024-02-01",
+                "ended_at": "2024-12-15",
                 "thumbnail": "https://example.com/research.jpg",
             },
         )
@@ -740,6 +850,8 @@ class ExperienceAuthorizationTest(TestCase):
                 "title": "Unsafe Thumbnail",
                 "description": "Tests unsafe URL validation.",
                 "category": "research",
+                "started_at": "2025-01-01",
+                "ended_at": "",
                 "thumbnail": "ftp://example.com/thumbnail.jpg",
             },
         )
@@ -759,6 +871,8 @@ class ExperienceAuthorizationTest(TestCase):
                 "title": "<em>Traditional Experience</em>",
                 "description": "Created through the <b>fallback form</b>.",
                 "category": "volunteer",
+                "started_at": "2023-03-01",
+                "ended_at": "2023-09-30",
                 "thumbnail": "https://example.com/traditional.jpg",
             },
         )
@@ -806,6 +920,8 @@ class ExperienceAuthorizationTest(TestCase):
             "title": "CSRF Protected Experience",
             "description": "Created with a valid CSRF header.",
             "category": "research",
+            "started_at": "2025-01-01",
+            "ended_at": "",
             "thumbnail": "https://example.com/csrf-experience.jpg",
         }
 

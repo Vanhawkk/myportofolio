@@ -43,6 +43,16 @@
         return template.replace(DUMMY_UUID, encodeURIComponent(experienceId));
     }
 
+    function formatExperienceDate(dateValue) {
+        const date = new Date(`${dateValue}T00:00:00`);
+        if (Number.isNaN(date.getTime())) return String(dateValue ?? "");
+
+        return new Intl.DateTimeFormat("en-US", {
+            month: "short",
+            year: "numeric",
+        }).format(date);
+    }
+
     function getCookie(name) {
         const cookies = document.cookie ? document.cookie.split(";") : [];
 
@@ -111,7 +121,12 @@
         const imageHtml = experience.thumbnail
             ? `<img class="experience-image" src="${escapeHtml(experience.thumbnail)}" alt="Thumbnail for ${escapeHtml(experience.title)}">`
             : "";
-        const status = experience.is_ongoing ? "Ongoing" : "Done";
+        const status = experience.is_ongoing ? "Ongoing" : "Past";
+        const dateRange = `${formatExperienceDate(experience.started_at)} – ${
+            experience.is_ongoing
+                ? "Present"
+                : formatExperienceDate(experience.ended_at)
+        }`;
         const editHtml = config.canEdit
             ? `
                 <a href="${escapeHtml(experienceUrl(config.editUrlTemplate, experienceId))}" class="button button-secondary">
@@ -136,6 +151,7 @@
             <span class="experience-category">${escapeHtml(experience.category_label)}</span>
             <h2>${escapeHtml(experience.title)}</h2>
             <p class="experience-description">${escapeHtml(experience.description)}</p>
+            <p class="experience-period">${escapeHtml(dateRange)}</p>
             <p class="experience-status">${status}</p>
             ${buildStarControl(experience, experienceId)}
             ${actionsHtml}
